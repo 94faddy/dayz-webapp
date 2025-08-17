@@ -1,0 +1,35 @@
+cat > .gitignore << 'EOF'
+# dependencies
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# builds / caches
+dist/
+build/
+.out/
+.nuxt/
+.next/
+.cache/
+.tmp/
+coverage/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# misc
+.DS_Store
+.idea/
+.vscode/
+*.swp
+EOF

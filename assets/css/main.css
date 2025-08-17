@@ -1,0 +1,139 @@
+/* assets/css/main.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-900 text-white font-sans;
+  }
+  
+  .dayz-gradient {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  }
+  
+  .dayz-red {
+    @apply text-red-500;
+  }
+  
+  .dayz-card {
+    @apply bg-gray-800 rounded-lg shadow-lg border border-gray-700;
+  }
+  
+  .dayz-button {
+    @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900;
+  }
+  
+  .dayz-button-primary {
+    @apply dayz-button bg-red-600 hover:bg-red-700 text-white focus:ring-red-500;
+  }
+  
+  .dayz-button-secondary {
+    @apply dayz-button bg-gray-700 hover:bg-gray-600 text-white focus:ring-gray-500;
+  }
+  
+  .dayz-input {
+    @apply w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent;
+  }
+  
+  .dayz-form-group {
+    @apply mb-6;
+  }
+  
+  .dayz-label {
+    @apply block text-sm font-medium text-gray-300 mb-2;
+  }
+  
+  .dayz-error {
+    @apply text-red-400 text-sm mt-2;
+  }
+  
+  .dayz-success {
+    @apply text-green-400 text-sm mt-2;
+  }
+}
+
+@layer components {
+  .loader {
+    @apply inline-block w-6 h-6 border-2 border-gray-300 border-t-red-500 rounded-full animate-spin;
+  }
+  
+  .tooltip {
+    @apply relative;
+  }
+  
+  .tooltip:hover::after {
+    @apply absolute -top-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded whitespace-nowrap opacity-100 pointer-events-none;
+    content: attr(data-tooltip);
+  }
+  
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.3s ease;
+  }
+  
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+  }
+}
+
+/* DayZ Theme Colors */
+:root {
+  --dayz-red: #dc2626;
+  --dayz-dark: #111827;
+  --dayz-gray: #374151;
+  --dayz-light-gray: #6b7280;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Animation classes */
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bounce-in {
+  animation: bounceIn 0.5s ease-out;
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

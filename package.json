@@ -1,0 +1,39 @@
+{
+  "name": "dayz-webapp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "build:prod": "NODE_ENV=production nuxt build",
+    "dev": "rm -rf .nuxt && NODE_ENV=development nuxt dev --port 2146 --ssr=false",
+    "dev:force": "rm -rf .nuxt .output node_modules/.cache && NODE_ENV=development nuxt dev --port 2146 --ssr=false",
+    "dev:prod": "NODE_ENV=production npm run build:prod && npm run start:prod",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "start": "node .output/server/index.mjs",
+    "start:prod": "NODE_ENV=production dotenv -e .env node .output/server/index.mjs"
+  },
+  "dependencies": {
+    "@headlessui/vue": "^1.7.23",
+    "@heroicons/vue": "^2.2.0",
+    "@tailwindcss/forms": "^0.5.10",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^17.2.1",
+    "mysql2": "^3.6.5",
+    "nuxt": "^3.13.2",
+    "sweetalert2": "^11.22.2",
+    "vue": "^3.5.18",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "latest",
+    "@nuxtjs/tailwindcss": "^6.12.1",
+    "autoprefixer": "^10.4.16",
+    "dotenv-cli": "^7.4.4",
+    "tailwindcss": "^3.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
