@@ -14,7 +14,7 @@
           <NuxtLink to="/" class="nav-link">Home</NuxtLink>
           <NuxtLink to="/leaderboard" class="nav-link">Leaderboard</NuxtLink>
           <NuxtLink to="/store" class="nav-link">Store</NuxtLink>
-          <NuxtLink v-if="user" to="/orders" class="nav-link">Orders</NuxtLink>
+          <!--<NuxtLink v-if="user" to="/orders" class="nav-link">Orders</NuxtLink>-->
         </nav>
         
         <!-- User Section -->

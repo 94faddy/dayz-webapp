@@ -1,4 +1,4 @@
-// server/api/store/purchase.post.js - FIXED AUTO DELIVERY
+// server/api/store/purchase.post.js - UPDATED WITH CONFIGURABLE AUTO DELIVERY
 import { executeQuery } from '~/utils/database.js'
 
 export default defineEventHandler(async (event) => {
@@ -142,21 +142,35 @@ export default defineEventHandler(async (event) => {
       session.data.user.points = updatedUser.points
       await session.update(session.data)
       
-      // Try to deliver item automatically if auto delivery is enabled
-      const config = useRuntimeConfig()
+      // Check if auto delivery is enabled from database
+      let autoDeliveryEnabled = false
       let deliveryAttempted = false
       let deliverySuccess = false
-      let deliveryMessage = 'Item will be delivered manually'
+      let deliveryMessage = 'Item purchased successfully. You can deliver it manually from your orders page.'
       
       try {
-        // Check if auto delivery is enabled
+        // Check auto delivery setting from database
         const [autoDeliverySetting] = await executeQuery(
           "SELECT setting_value FROM system_settings WHERE setting_key = 'auto_delivery'"
         )
         
-        if (autoDeliverySetting?.setting_value === 'true' || process.env.AUTO_DELIVERY === 'true') {
+        autoDeliveryEnabled = autoDeliverySetting?.setting_value === 'true'
+        
+        console.log('🔍 Auto delivery setting:', {
+          enabled: autoDeliveryEnabled,
+          settingValue: autoDeliverySetting?.setting_value
+        })
+        
+        if (autoDeliveryEnabled) {
           deliveryAttempted = true
           console.log('🚀 Attempting auto delivery for order:', orderNumber)
+          
+          const config = useRuntimeConfig()
+          
+          // Validate API configuration
+          if (!config.dzsvApi || !config.dzsvApiKey) {
+            throw new Error('DayZ API configuration missing')
+          }
           
           // Prepare item data according to DayZ API documentation
           const itemData = {
@@ -228,7 +242,7 @@ export default defineEventHandler(async (event) => {
           
           if (deliveryResponse && deliveryResponse.success === true) {
             deliverySuccess = true
-            deliveryMessage = 'Item delivered automatically to your character'
+            deliveryMessage = 'Item delivered automatically to your character! Check your inventory in-game.'
             
             // Update delivery status
             await executeQuery(
@@ -255,7 +269,7 @@ export default defineEventHandler(async (event) => {
             const apiErrorMessage = deliveryResponse?.message || 
                                   deliveryResponse?.error || 
                                   'Auto delivery failed'
-            deliveryMessage = `Auto delivery failed: ${apiErrorMessage}`
+            deliveryMessage = `Auto delivery failed: ${apiErrorMessage}. You can try manual delivery from your orders page.`
             
             console.error('❌ Auto delivery API failure:', deliveryResponse)
             
@@ -266,28 +280,33 @@ export default defineEventHandler(async (event) => {
               [JSON.stringify(deliveryResponse), orderId]
             )
           }
+        } else {
+          console.log('ℹ️ Auto delivery is disabled, manual delivery required')
         }
       } catch (deliveryError) {
         console.error('❌ Auto delivery error:', deliveryError)
-        deliveryMessage = `Auto delivery failed: ${deliveryError.message}`
         
-        // Log the delivery failure
-        await executeQuery(
-          `UPDATE purchase_order_items 
-           SET delivery_status = 'failed', delivery_data = ?
-           WHERE order_id = ?`,
-          [JSON.stringify({ 
-            error: deliveryError.message,
-            status: deliveryError.status || 500,
-            timestamp: new Date().toISOString()
-          }), orderId]
-        )
+        if (autoDeliveryEnabled) {
+          deliveryMessage = `Auto delivery failed: ${deliveryError.message}. You can try manual delivery from your orders page.`
+          
+          // Log the delivery failure
+          await executeQuery(
+            `UPDATE purchase_order_items 
+             SET delivery_status = 'failed', delivery_data = ?
+             WHERE order_id = ?`,
+            [JSON.stringify({ 
+              error: deliveryError.message,
+              status: deliveryError.status || 500,
+              timestamp: new Date().toISOString()
+            }), orderId]
+          )
+        }
       }
       
       return {
         success: true,
         message: 'Purchase completed successfully',
-        purchaseId: orderId, // เปลี่ยนจาก orderNumber เป็น orderId
+        purchaseId: orderId,
         orderNumber: orderNumber,
         orderId: orderId,
         newBalance: updatedUser.points,
@@ -298,6 +317,7 @@ export default defineEventHandler(async (event) => {
           totalPrice
         },
         delivery: {
+          autoDeliveryEnabled,
           attempted: deliveryAttempted,
           success: deliverySuccess,
           status: deliverySuccess ? 'delivered' : (deliveryAttempted ? 'failed' : 'pending'),

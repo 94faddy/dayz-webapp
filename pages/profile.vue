@@ -114,7 +114,12 @@
       <div class="dayz-card p-8">
         <!-- Transactions Tab -->
         <div v-if="activeTab === 'transactions'" class="space-y-6">
-          <h2 class="text-2xl font-bold text-white mb-6">Recent Transactions</h2>
+          <div class="flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-white">Recent Transactions</h2>
+            <div v-if="transactions.length > itemsPerPage" class="text-sm text-gray-400">
+              Showing {{ (currentTransactionPage - 1) * itemsPerPage + 1 }} - {{ Math.min(currentTransactionPage * itemsPerPage, transactions.length) }} of {{ transactions.length }}
+            </div>
+          </div>
           
           <div v-if="loading" class="flex justify-center py-8">
             <div class="loader mr-4"></div>
@@ -140,7 +145,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="transaction in transactions" :key="transaction.id" class="border-b border-gray-800">
+                <tr v-for="transaction in paginatedTransactions" :key="transaction.id" class="border-b border-gray-800">
                   <td class="py-3 px-4">
                     <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
                           :class="getTransactionTypeClass(transaction.type)">
@@ -157,12 +162,72 @@
                 </tr>
               </tbody>
             </table>
+            
+            <!-- Transaction Pagination -->
+            <div v-if="totalTransactionPages > 1" class="flex items-center justify-between mt-6">
+              <div class="text-sm text-gray-400">
+                Page {{ currentTransactionPage }} of {{ totalTransactionPages }}
+              </div>
+              <div class="flex space-x-2">
+                <button 
+                  @click="currentTransactionPage = 1" 
+                  :disabled="currentTransactionPage === 1"
+                  class="px-3 py-2 text-sm rounded-md transition-colors"
+                  :class="currentTransactionPage === 1 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                >
+                  First
+                </button>
+                <button 
+                  @click="currentTransactionPage--" 
+                  :disabled="currentTransactionPage === 1"
+                  class="px-3 py-2 text-sm rounded-md transition-colors"
+                  :class="currentTransactionPage === 1 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                >
+                  Previous
+                </button>
+                
+                <!-- Page Numbers -->
+                <template v-for="page in visibleTransactionPages" :key="page">
+                  <button 
+                    v-if="page !== '...'"
+                    @click="currentTransactionPage = page"
+                    class="px-3 py-2 text-sm rounded-md transition-colors"
+                    :class="currentTransactionPage === page ? 'bg-red-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                  >
+                    {{ page }}
+                  </button>
+                  <span v-else class="px-3 py-2 text-sm text-gray-400">...</span>
+                </template>
+                
+                <button 
+                  @click="currentTransactionPage++" 
+                  :disabled="currentTransactionPage === totalTransactionPages"
+                  class="px-3 py-2 text-sm rounded-md transition-colors"
+                  :class="currentTransactionPage === totalTransactionPages ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                >
+                  Next
+                </button>
+                <button 
+                  @click="currentTransactionPage = totalTransactionPages" 
+                  :disabled="currentTransactionPage === totalTransactionPages"
+                  class="px-3 py-2 text-sm rounded-md transition-colors"
+                  :class="currentTransactionPage === totalTransactionPages ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                >
+                  Last
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         
         <!-- Purchases Tab -->
         <div v-if="activeTab === 'purchases'" class="space-y-6">
-          <h2 class="text-2xl font-bold text-white mb-6">Purchase History</h2>
+          <div class="flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-white">Purchase History</h2>
+            <div v-if="purchases.length > itemsPerPage" class="text-sm text-gray-400">
+              Showing {{ (currentPurchasePage - 1) * itemsPerPage + 1 }} - {{ Math.min(currentPurchasePage * itemsPerPage, purchases.length) }} of {{ purchases.length }}
+            </div>
+          </div>
           
           <div v-if="loading" class="flex justify-center py-8">
             <div class="loader mr-4"></div>
@@ -180,33 +245,115 @@
             </NuxtLink>
           </div>
           
-          <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div v-for="purchase in purchases" :key="purchase.id" class="bg-gray-800 rounded-lg p-6">
-              <div class="flex justify-between items-start mb-4">
-                <h3 class="text-lg font-semibold text-white">{{ purchase.item_name }}</h3>
-                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-                      :class="getPurchaseStatusClass(purchase.status)">
-                  {{ purchase.status }}
-                </span>
+          <div v-else class="space-y-4">
+            <!-- Purchases Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead>
+                  <tr class="border-b border-gray-700">
+                    <th class="text-left py-3 px-4 text-gray-300 font-medium">Item</th>
+                    <th class="text-left py-3 px-4 text-gray-300 font-medium">Category</th>
+                    <th class="text-center py-3 px-4 text-gray-300 font-medium">Qty</th>
+                    <th class="text-right py-3 px-4 text-gray-300 font-medium">Price</th>
+                    <th class="text-center py-3 px-4 text-gray-300 font-medium">Status</th>
+                    <th class="text-right py-3 px-4 text-gray-300 font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="purchase in paginatedPurchases" :key="purchase.id" class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
+                    <td class="py-4 px-4">
+                      <div class="font-medium text-white">{{ purchase.item_name }}</div>
+                      <div v-if="purchase.description" class="text-sm text-gray-400 mt-1">
+                        {{ purchase.description }}
+                      </div>
+                    </td>
+                    <td class="py-4 px-4">
+                      <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 capitalize">
+                        {{ purchase.category }}
+                      </span>
+                    </td>
+                    <td class="py-4 px-4 text-center">
+                      <span class="text-white font-medium">{{ purchase.quantity }}</span>
+                    </td>
+                    <td class="py-4 px-4 text-right">
+                      <div class="text-yellow-500 font-semibold">
+                        {{ formatNumber(purchase.total_price) }}
+                      </div>
+                      <div class="text-xs text-gray-400">
+                        Points
+                      </div>
+                    </td>
+                    <td class="py-4 px-4 text-center">
+                      <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                            :class="getPurchaseStatusClass(purchase.status)">
+                        {{ getStatusText(purchase.status) }}
+                      </span>
+                    </td>
+                    <td class="py-4 px-4 text-right">
+                      <div class="text-white text-sm">
+                        {{ formatDate(purchase.created_at, 'table') }}
+                      </div>
+                      <div class="text-xs text-gray-400">
+                        {{ formatTime(purchase.created_at) }}
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- Purchase Pagination -->
+            <div v-if="totalPurchasePages > 1" class="flex items-center justify-between mt-6">
+              <div class="text-sm text-gray-400">
+                Page {{ currentPurchasePage }} of {{ totalPurchasePages }}
               </div>
-              
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between text-gray-400">
-                  <span>Quantity:</span>
-                  <span class="text-white">{{ purchase.quantity }}</span>
-                </div>
-                <div class="flex justify-between text-gray-400">
-                  <span>Total Price:</span>
-                  <span class="text-yellow-500 font-medium">{{ formatNumber(purchase.total_price) }} Points</span>
-                </div>
-                <div class="flex justify-between text-gray-400">
-                  <span>Category:</span>
-                  <span class="text-white capitalize">{{ purchase.category }}</span>
-                </div>
-                <div class="flex justify-between text-gray-400">
-                  <span>Date:</span>
-                  <span class="text-white">{{ formatDate(purchase.created_at) }}</span>
-                </div>
+              <div class="flex space-x-2">
+                <button 
+                  @click="currentPurchasePage = 1" 
+                  :disabled="currentPurchasePage === 1"
+                  class="px-3 py-2 text-sm rounded-md transition-colors"
+                  :class="currentPurchasePage === 1 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                >
+                  First
+                </button>
+                <button 
+                  @click="currentPurchasePage--" 
+                  :disabled="currentPurchasePage === 1"
+                  class="px-3 py-2 text-sm rounded-md transition-colors"
+                  :class="currentPurchasePage === 1 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                >
+                  Previous
+                </button>
+                
+                <!-- Page Numbers -->
+                <template v-for="page in visiblePurchasePages" :key="page">
+                  <button 
+                    v-if="page !== '...'"
+                    @click="currentPurchasePage = page"
+                    class="px-3 py-2 text-sm rounded-md transition-colors"
+                    :class="currentPurchasePage === page ? 'bg-red-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                  >
+                    {{ page }}
+                  </button>
+                  <span v-else class="px-3 py-2 text-sm text-gray-400">...</span>
+                </template>
+                
+                <button 
+                  @click="currentPurchasePage++" 
+                  :disabled="currentPurchasePage === totalPurchasePages"
+                  class="px-3 py-2 text-sm rounded-md transition-colors"
+                  :class="currentPurchasePage === totalPurchasePages ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                >
+                  Next
+                </button>
+                <button 
+                  @click="currentPurchasePage = totalPurchasePages" 
+                  :disabled="currentPurchasePage === totalPurchasePages"
+                  class="px-3 py-2 text-sm rounded-md transition-colors"
+                  :class="currentPurchasePage === totalPurchasePages ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-white hover:bg-gray-600'"
+                >
+                  Last
+                </button>
               </div>
             </div>
           </div>
@@ -297,16 +444,6 @@
                   <span v-else-if="!hasNameChanged">{{ editableName ? 'No Changes Made' : 'Enter New Name' }}</span>
                   <span v-else>Save Name Change</span>
                 </button>
-                
-                <!-- Debug Info (เฉพาะ development) -->
-                <!--<div v-if="showDebugInfo && profile" class="text-xs text-gray-500 mt-2 p-2 bg-gray-900 rounded">
-                  <p>Debug Info:</p>
-                  <p>• Last change: {{ profile.last_name_change || 'Never' }}</p>
-                  <p>• Total count: {{ profile.name_change_count || 0 }}</p>
-                  <p>• Can change: {{ canChangeName }}</p>
-                  <p>• This month: {{ getNameChangesThisMonth() }}</p>
-                  <p>• Max per month: {{ maxNameChanges }}</p>
-                </div>-->
               </div>
             </div>
             
@@ -369,6 +506,11 @@ const purchases = ref([])
 const maxNameChanges = ref(1)
 const showDebugInfo = ref(process.dev) // แสดง debug info เฉพาะ development
 
+// Pagination state
+const itemsPerPage = ref(10)
+const currentTransactionPage = ref(1)
+const currentPurchasePage = ref(1)
+
 // Name editing state
 const editableName = ref('')
 const originalName = ref('')
@@ -405,6 +547,77 @@ const tabs = [
   { id: 'settings', name: 'Settings' }
 ]
 
+// Computed Properties for Pagination
+const totalTransactionPages = computed(() => {
+  return Math.ceil(transactions.value.length / itemsPerPage.value)
+})
+
+const totalPurchasePages = computed(() => {
+  return Math.ceil(purchases.value.length / itemsPerPage.value)
+})
+
+const paginatedTransactions = computed(() => {
+  const start = (currentTransactionPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return transactions.value.slice(start, end)
+})
+
+const paginatedPurchases = computed(() => {
+  const start = (currentPurchasePage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return purchases.value.slice(start, end)
+})
+
+const visibleTransactionPages = computed(() => {
+  return getVisiblePages(currentTransactionPage.value, totalTransactionPages.value)
+})
+
+const visiblePurchasePages = computed(() => {
+  return getVisiblePages(currentPurchasePage.value, totalPurchasePages.value)
+})
+
+// Helper function for pagination
+const getVisiblePages = (currentPage, totalPages) => {
+  const pages = []
+  const showPages = 5 // จำนวนหน้าที่จะแสดง
+  
+  if (totalPages <= showPages) {
+    // แสดงทุกหน้าถ้าหน้าไม่เยอะ
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(i)
+    }
+  } else {
+    // แสดงหน้าแบบย่อ
+    const start = Math.max(1, currentPage - 2)
+    const end = Math.min(totalPages, currentPage + 2)
+    
+    if (start > 1) {
+      pages.push(1)
+      if (start > 2) pages.push('...')
+    }
+    
+    for (let i = start; i <= end; i++) {
+      pages.push(i)
+    }
+    
+    if (end < totalPages) {
+      if (end < totalPages - 1) pages.push('...')
+      pages.push(totalPages)
+    }
+  }
+  
+  return pages
+}
+
+// Watch for tab changes to reset pagination
+watch(activeTab, (newTab) => {
+  if (newTab === 'transactions') {
+    currentTransactionPage.value = 1
+  } else if (newTab === 'purchases') {
+    currentPurchasePage.value = 1
+  }
+})
+
 // Computed
 const canChangeName = computed(() => {
   if (!profile.value) return false
@@ -432,10 +645,28 @@ const formatDate = (dateString, format = 'long') => {
     })
   }
   
+  if (format === 'table') {
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
+  
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const formatTime = (dateString) => {
+  if (!dateString) return ''
+  
+  const date = new Date(dateString)
+  return date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit'
   })
@@ -455,9 +686,22 @@ const getPurchaseStatusClass = (status) => {
   const classes = {
     pending: 'bg-yellow-900 text-yellow-300',
     completed: 'bg-green-900 text-green-300',
-    delivered: 'bg-blue-900 text-blue-300'
+    delivered: 'bg-blue-900 text-blue-300',
+    processing: 'bg-orange-900 text-orange-300',
+    cancelled: 'bg-red-900 text-red-300'
   }
   return classes[status] || 'bg-gray-900 text-gray-300'
+}
+
+const getStatusText = (status) => {
+  const statusMap = {
+    pending: 'Pending',
+    completed: 'Completed',
+    delivered: 'Delivered',
+    processing: 'Processing',
+    cancelled: 'Cancelled'
+  }
+  return statusMap[status] || status
 }
 
 const getAvatarInitial = () => {
@@ -909,112 +1153,6 @@ const showChangePassword = async () => {
       color: '#fff',
       confirmButtonColor: '#dc2626'
     })
-  }
-}
-
-const showChangeName = async () => {
-  const remainingChanges = maxNameChanges.value - getNameChangesThisMonth()
-  
-  const { value: newName } = await Swal.fire({
-    title: 'Change In-Game Name',
-    html: `
-      <div class="text-left mb-4">
-        <p class="text-sm text-gray-300 mb-2">Current name: <strong>${profile.value?.name}</strong></p>
-        <p class="text-xs text-gray-400 mb-2">Changes used this month: ${getNameChangesThisMonth()} / ${maxNameChanges.value}</p>
-        <p class="text-xs text-gray-400 mb-2">Remaining changes: ${remainingChanges}</p>
-        <p class="text-xs text-yellow-400">Choose your new in-game name carefully.</p>
-      </div>
-    `,
-    input: 'text',
-    inputValue: '',
-    inputPlaceholder: 'Enter new name (3-50 characters)',
-    background: '#1f2937',
-    color: '#fff',
-    showCancelButton: true,
-    confirmButtonColor: '#dc2626',
-    cancelButtonColor: '#6b7280',
-    confirmButtonText: 'Change Name',
-    inputValidator: (value) => {
-      if (!value) {
-        return 'Name is required'
-      }
-      if (value.length < 3) {
-        return 'Name must be at least 3 characters'
-      }
-      if (value.length > 50) {
-        return 'Name must be less than 50 characters'
-      }
-      if (value === profile.value?.name) {
-        return 'New name must be different from current name'
-      }
-    }
-  })
-  
-  if (newName) {
-    try {
-      loading.value = true
-      
-      const response = await $fetch('/api/profile/update-profile', {
-        method: 'POST',
-        body: {
-          action: 'change_name',
-          data: {
-            newName: newName
-          }
-        }
-      })
-      
-      if (response.success) {
-        await Swal.fire({
-          title: 'Name Changed Successfully! 🎉',
-          html: `
-            <div class="text-left">
-              <p class="mb-2">Your in-game name has been changed to <strong class="text-green-400">"${newName}"</strong></p>
-              <hr class="my-3 border-gray-600">
-              <div class="text-sm text-gray-300">
-                <p>• Changes used this month: ${response.nameChangeCount} / ${maxNameChanges.value}</p>
-                <p>• Remaining changes: ${Math.max(0, maxNameChanges.value - response.nameChangeCount)}</p>
-                ${response.nameChangeCount >= maxNameChanges.value ? 
-                  `<p class="text-yellow-400 mt-2">• Next change available: ${getNextAllowedChangeDate()}</p>` : 
-                  ''
-                }
-              </div>
-            </div>
-          `,
-          icon: 'success',
-          background: '#1f2937',
-          color: '#fff',
-          confirmButtonColor: '#dc2626'
-        })
-        
-        // Update local profile data
-        profile.value.name = newName
-        profile.value.name_change_count = response.nameChangeCount
-        profile.value.last_name_change = response.lastNameChange
-        
-        // Update user state สำหรับ header
-        user.value.name = newName
-        
-        console.log('✅ Name change completed:', {
-          newName,
-          nameChangeCount: response.nameChangeCount,
-          lastNameChange: response.lastNameChange
-        })
-      }
-      
-    } catch (error) {
-      console.error('Name change error:', error)
-      await Swal.fire({
-        title: 'Change Failed',
-        text: error.data?.message || 'Failed to change name. Please try again.',
-        icon: 'error',
-        background: '#1f2937',
-        color: '#fff',
-        confirmButtonColor: '#dc2626'
-      })
-    } finally {
-      loading.value = false
-    }
   }
 }
 

@@ -32,33 +32,45 @@
             
             <div class="space-y-6">
               <!-- Auto Delivery -->
-              <div class="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-                <div>
-                  <h3 class="text-sm font-medium text-white">Auto Delivery</h3>
-                  <p class="text-sm text-gray-400">Automatically deliver items after purchase</p>
-                  <p v-if="autoDeliveryEnabled" class="text-xs text-green-400 mt-1">
-                    ✅ Items will be delivered automatically to players
-                  </p>
-                  <p v-else class="text-xs text-yellow-400 mt-1">
-                    ⚠️ Items require manual delivery
-                  </p>
-                </div>
-                <button
-                  @click="toggleAutoDelivery"
-                  :disabled="loading"
-                  :class="[
-                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    autoDeliveryEnabled ? 'bg-green-600' : 'bg-gray-600',
-                    loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                  ]"
-                >
-                  <span
+              <div class="p-4 bg-gray-700 rounded-lg">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 class="text-sm font-medium text-white">Auto Delivery</h3>
+                    <p class="text-sm text-gray-400">Automatically deliver items after purchase</p>
+                  </div>
+                  <button
+                    @click="toggleAutoDelivery"
+                    :disabled="loading"
                     :class="[
-                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      autoDeliveryEnabled ? 'translate-x-6' : 'translate-x-1'
+                      'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                      autoDeliveryEnabled ? 'bg-green-600' : 'bg-gray-600',
+                      loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                     ]"
-                  />
-                </button>
+                  >
+                    <span
+                      :class="[
+                        'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                        autoDeliveryEnabled ? 'translate-x-6' : 'translate-x-1'
+                      ]"
+                    />
+                  </button>
+                </div>
+                
+                <!-- Status Display -->
+                <div class="text-sm">
+                  <div v-if="autoDeliveryEnabled" class="flex items-center text-green-400">
+                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Items will be delivered automatically to players after purchase</span>
+                  </div>
+                  <div v-else class="flex items-center text-yellow-400">
+                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Players must manually claim their items from the orders page</span>
+                  </div>
+                </div>
               </div>
               
               <!-- Max Delivery Attempts -->
@@ -259,7 +271,7 @@ const tabs = [
   { id: 'system', name: 'System' }
 ]
 
-const activeTab = ref('store') // เริ่มต้นที่ Store tab
+const activeTab = ref('store')
 const loading = ref(false)
 const message = ref({ show: false, type: '', text: '' })
 
@@ -294,7 +306,7 @@ const loadSettings = async () => {
     // Store/Delivery settings
     autoDeliveryEnabled.value = systemSettings.delivery?.auto_delivery?.value === 'true'
     maxDeliveryAttempts.value = systemSettings.delivery?.max_delivery_attempts?.value || '3'
-    storeEnabled.value = systemSettings.store?.store_enabled?.value !== 'false' // default true
+    storeEnabled.value = systemSettings.store?.store_enabled?.value !== 'false'
     pointExchangeRate.value = systemSettings.payment?.point_exchange_rate?.value || '100'
     
     // System settings

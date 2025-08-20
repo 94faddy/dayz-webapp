@@ -18,12 +18,20 @@
           </svg>
           <span class="text-2xl font-bold text-yellow-500">{{ formatNumber(user.points) }}</span>
           <span class="text-gray-400">Points</span>
-          <button 
-            @click="showTopUpModal"
-            class="ml-4 bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded-full text-sm font-medium transition-colors"
-          >
-            Top Up
-          </button>
+          <div class="flex items-center space-x-2 ml-4">
+            <button 
+              @click="showTopUpModal"
+              class="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded-full text-sm font-medium transition-colors"
+            >
+              Top Up
+            </button>
+            <NuxtLink 
+              to="/orders"
+              class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded-full text-sm font-medium transition-colors"
+            >
+              My Orders
+            </NuxtLink>            
+          </div>
         </div>
         
         <!-- Login Required Message -->
@@ -74,7 +82,7 @@
             <img
               :src="item.image_url || '/placeholder-item.jpg'"
               :alt="item.name"
-              class="w-full h-full object-cover"
+              class="w-full h-full object-contain p-2"
               @error="handleImageError"
             />
             <!-- Category Badge -->
@@ -111,9 +119,19 @@
             <!-- Item Info -->
             <div class="flex items-center justify-between text-xs text-gray-500 mb-4">
               <span>{{ item.classname }}</span>
-              <span v-if="item.attachments && item.attachments.length > 0" class="text-green-400">
-                +{{ item.attachments.length }} attachments
-              </span>
+              <div class="flex items-center space-x-2">
+                <span v-if="item.attachments && item.attachments.length > 0" class="text-green-400">
+                  +{{ item.attachments.length }} attachments
+                </span>
+                <!-- Detail Button -->
+                <button
+                  @click="showItemDetails(item)"
+                  class="text-blue-400 hover:text-blue-300 text-xs underline"
+                  title="View item details and attachments"
+                >
+                  Details
+                </button>
+              </div>
             </div>
             
             <!-- Action Button -->
@@ -160,6 +178,172 @@
         <h3 class="text-xl font-semibold text-white mb-2">No Items Found</h3>
         <p class="text-gray-400">No items available in the selected category.</p>
       </div>
+      
+      <!-- Item Details Modal -->
+      <div v-if="selectedItem" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div class="p-6">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between mb-6">
+              <h3 class="text-xl font-semibold text-white">Item Details</h3>
+              <button @click="selectedItem = null" class="text-gray-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            
+            <!-- Item Header -->
+            <div class="flex items-start space-x-6 mb-6">
+              <div class="flex-shrink-0">
+                <img
+                  :src="selectedItem.image_url || '/placeholder-item.jpg'"
+                  :alt="selectedItem.name"
+                  class="w-32 h-32 object-contain rounded-lg bg-gray-700 p-2"
+                  @error="handleImageError"
+                />
+              </div>
+              
+              <div class="flex-1">
+                <h4 class="text-2xl font-bold text-white mb-2">{{ selectedItem.name }}</h4>
+                <p class="text-gray-400 mb-3">{{ selectedItem.description || 'High-quality item for your survival needs.' }}</p>
+                
+                <div class="flex items-center space-x-4 mb-3">
+                  <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium"
+                        :class="getCategoryBadgeClass(selectedItem.category)">
+                    {{ getCategoryName(selectedItem.category) }}
+                  </span>
+                  
+                  <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/>
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd"/>
+                    </svg>
+                    <span class="text-2xl font-bold text-yellow-400">{{ formatNumber(selectedItem.price) }}</span>
+                  </div>
+                </div>
+                
+                <div class="text-sm text-gray-400">
+                  <p><strong>Classname:</strong> {{ selectedItem.classname }}</p>
+                  <p v-if="!selectedItem.stock_unlimited">
+                    <strong>Stock:</strong> 
+                    <span :class="selectedItem.stock_quantity < 10 ? 'text-red-400' : 'text-green-400'">
+                      {{ selectedItem.stock_quantity }} available
+                    </span>
+                  </p>
+                  <p v-else><strong>Stock:</strong> <span class="text-green-400">Unlimited</span></p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- What You Get Section -->
+            <div class="bg-gray-700 rounded-lg p-4 mb-6">
+              <h5 class="text-lg font-semibold text-white mb-4 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                What You Get
+              </h5>
+              
+              <!-- Main Item -->
+              <div class="mb-4">
+                <div class="flex items-center space-x-3 p-3 bg-gray-600 rounded-lg">
+                  <div class="w-3 h-3 bg-green-400 rounded-full"></div>
+                  <div class="flex-1">
+                    <span class="text-white font-medium">{{ selectedItem.name }}</span>
+                  </div>
+                  <span class="text-sm text-gray-400">× 1</span>
+                </div>
+              </div>
+              
+              <!-- Attachments -->
+              <div v-if="selectedItem.attachments && selectedItem.attachments.length > 0">
+                <h6 class="text-white font-medium mb-3 flex items-center">
+                  <svg class="w-4 h-4 mr-2 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                  </svg>
+                  Included Attachments ({{ selectedItem.attachments.length }})
+                </h6>
+                
+                <div class="space-y-2">
+                  <div
+                    v-for="(attachment, index) in selectedItem.attachments"
+                    :key="index"
+                    class="flex items-center space-x-3 p-3 bg-gray-600 rounded-lg"
+                  >
+                    <div class="w-3 h-3 bg-blue-400 rounded-full"></div>
+                    <div class="flex-1">
+                      <span class="text-white">{{ attachment.name || attachment.classname }}</span>
+                    </div>
+                    <span class="text-sm text-gray-400">× {{ attachment.quantity || 1 }}</span>
+                  </div>
+                  
+                  <!-- Nested Attachments -->
+                  <template v-for="(attachment, index) in selectedItem.attachments" :key="`nested-${index}`">
+                    <div v-if="attachment.attachments && attachment.attachments.length > 0" class="ml-6 space-y-2">
+                      <div
+                        v-for="(nested, nestedIndex) in attachment.attachments"
+                        :key="nestedIndex"
+                        class="flex items-center space-x-3 p-2 bg-gray-500 rounded-lg"
+                      >
+                        <div class="w-2 h-2 bg-purple-400 rounded-full"></div>
+                        <div class="flex-1">
+                          <span class="text-white text-sm">{{ nested.name || nested.classname }}</span>
+                        </div>
+                        <span class="text-xs text-gray-400">× {{ nested.quantity || 1 }}</span>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+              
+              <!-- No Attachments -->
+              <div v-else class="text-center py-4">
+                <svg class="w-12 h-12 text-gray-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2M4 13h2m13-8V4a1 1 0 00-1-1H7a1 1 0 00-1 1v1m8 0V4.5"/>
+                </svg>
+                <p class="text-gray-400 text-sm">This item comes as a single piece with no additional attachments.</p>
+              </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="flex space-x-3">
+              <button
+                @click="purchaseItem(selectedItem)"
+                :disabled="!user || (user && user.points < selectedItem.price) || (!selectedItem.stock_unlimited && selectedItem.stock_quantity === 0)"
+                class="flex-1 py-3 rounded-lg font-medium transition-all duration-200"
+                :class="!user 
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
+                  : (!selectedItem.stock_unlimited && selectedItem.stock_quantity === 0)
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : user.points < selectedItem.price 
+                      ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
+                      : 'dayz-button-primary hover:shadow-lg'"
+              >
+                <template v-if="!user">
+                  Login to Purchase
+                </template>
+                <template v-else-if="!selectedItem.stock_unlimited && selectedItem.stock_quantity === 0">
+                  Out of Stock
+                </template>
+                <template v-else-if="user.points < selectedItem.price">
+                  Insufficient Points
+                </template>
+                <template v-else>
+                  Purchase for {{ formatNumber(selectedItem.price) }} Points
+                </template>
+              </button>
+              
+              <button 
+                @click="selectedItem = null" 
+                class="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -179,6 +363,8 @@ const loading = ref(true)
 const selectedCategory = ref('all')
 const storeItems = ref([])
 const categories = ref([])
+const autoDeliveryStatus = ref(null)
+const selectedItem = ref(null)
 
 // Computed
 const filteredItems = computed(() => {
@@ -226,6 +412,24 @@ const getCategoryIconPath = (category) => {
 
 const handleImageError = (event) => {
   event.target.src = '/placeholder-item.jpg'
+}
+
+const showItemDetails = (item) => {
+  selectedItem.value = item
+}
+
+// Load auto delivery status
+const loadAutoDeliveryStatus = async () => {
+  if (!user.value) return
+  
+  try {
+    const response = await $fetch('/api/store/settings')
+    autoDeliveryStatus.value = response.autoDeliveryEnabled || false
+    console.log('🔍 Auto delivery status:', autoDeliveryStatus.value)
+  } catch (error) {
+    console.error('Failed to load auto delivery status:', error)
+    autoDeliveryStatus.value = false
+  }
 }
 
 // Load store items from database
@@ -286,7 +490,7 @@ const purchaseItem = async (item) => {
     return
   }
   
-  // Show item details with attachments
+  // Show item details with attachments and delivery info
   let itemDetailsHtml = `
     <div class="text-left">
       <p class="mb-2">Item: <strong>${item.name}</strong></p>
@@ -308,8 +512,26 @@ const purchaseItem = async (item) => {
     itemDetailsHtml += '</ul>'
   }
   
+  // Show delivery information
   itemDetailsHtml += `
       <hr class="my-3 border-gray-600">
+      <div class="bg-gray-700 p-3 rounded mb-3">
+        <div class="flex items-center mb-2">
+          ${autoDeliveryStatus.value 
+            ? '<svg class="w-4 h-4 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>'
+            : '<svg class="w-4 h-4 text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>'
+          }
+          <span class="text-sm font-medium ${autoDeliveryStatus.value ? 'text-green-400' : 'text-yellow-400'}">
+            ${autoDeliveryStatus.value ? 'Auto Delivery: Enabled' : 'Auto Delivery: Disabled'}
+          </span>
+        </div>
+        <p class="text-xs text-gray-400">
+          ${autoDeliveryStatus.value 
+            ? 'Item will be automatically delivered to your character after purchase.'
+            : 'You will need to manually deliver the item from your orders page after purchase.'
+          }
+        </p>
+      </div>
       <p class="mb-2">Your Balance: <strong>${formatNumber(user.value.points)} Points</strong></p>
       <p class="text-sm text-gray-400">After purchase: <strong>${formatNumber(user.value.points - item.price)} Points</strong></p>
     </div>
@@ -341,23 +563,38 @@ const purchaseItem = async (item) => {
       if (response.success) {
         user.value.points = response.newBalance
         
+        // Close item details modal if open
+        selectedItem.value = null
+        
+        let successMessage = `✅ <strong>${item.name}</strong> has been purchased successfully!<br>`
+        successMessage += `Purchase ID: <strong>#${response.purchaseId}</strong><br>`
+        successMessage += `Remaining Points: <strong>${formatNumber(response.newBalance)}</strong><br><br>`
+        
+        if (response.delivery.autoDeliveryEnabled) {
+          if (response.delivery.success) {
+            successMessage += `<div class="bg-green-800 p-3 rounded mb-3">
+              <strong>🚀 Auto Delivery Successful!</strong><br>
+              ${response.delivery.message}<br>
+              Check your inventory in the game!
+            </div>`
+          } else {
+            successMessage += `<div class="bg-red-800 p-3 rounded mb-3">
+              <strong>⚠️ Auto Delivery Failed</strong><br>
+              ${response.delivery.message}<br>
+              You can manually deliver from your <a href="/orders" class="text-blue-400 underline">orders page</a>.
+            </div>`
+          }
+        } else {
+          successMessage += `<div class="bg-yellow-800 p-3 rounded mb-3">
+            <strong>📦 Manual Delivery Required</strong><br>
+            ${response.delivery.message}<br>
+            Visit your <a href="/orders" class="text-blue-400 underline">orders page</a> to deliver this item.
+          </div>`
+        }
+        
         await Swal.fire({
           title: 'Purchase Successful!',
-          html: `
-            <div class="text-left">
-              <p class="mb-2">✅ <strong>${item.name}</strong> has been added to your inventory!</p>
-              <p class="mb-2">Purchase ID: <strong>#${response.purchaseId}</strong></p>
-              <p class="mb-2">Remaining Points: <strong>${formatNumber(response.newBalance)}</strong></p>
-              <hr class="my-3 border-gray-600">
-              <p class="text-sm text-gray-400">
-                <strong>How to claim your item:</strong><br>
-                1. Join the DayZ server<br>
-                2. The item will be automatically delivered to your character<br>
-                3. Check your inventory or vicinity<br>
-                4. If you don't receive it within 5 minutes, contact support
-              </p>
-            </div>
-          `,
+          html: successMessage,
           icon: 'success',
           background: '#1f2937',
           color: '#fff',
@@ -471,9 +708,19 @@ const showTopUpModal = async () => {
   }
 }
 
-// Load store items on mount
+// Load store items and auto delivery status on mount
 onMounted(async () => {
   await loadStoreItems()
+  await loadAutoDeliveryStatus()
+})
+
+// Watch user changes to reload auto delivery status
+watch(user, async (newUser) => {
+  if (newUser) {
+    await loadAutoDeliveryStatus()
+  } else {
+    autoDeliveryStatus.value = null
+  }
 })
 </script>
 
