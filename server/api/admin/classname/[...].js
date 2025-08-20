@@ -23,58 +23,56 @@ export default defineEventHandler(async (event) => {
       }
     })
     
+    console.log('📦 Raw API Response:', JSON.stringify(response).substring(0, 200) + '...')
+    
     // Process response based on endpoint
     if (path === 'search') {
-      // For search endpoint - extract ONLY classname strings
-      if (response && response.data) {
-        let classnames = []
-        
-        // Handle different response formats
-        if (Array.isArray(response.data)) {
-          classnames = response.data.map(item => {
-            // If item is a string, return it
-            if (typeof item === 'string') {
-              return item
-            }
-            // If item is object with name field (which is the classname)
-            if (item && item.name) {
-              return item.name
-            }
-            // If item has classname field
-            if (item && item.classname) {
-              return item.classname
-            }
-            return null
-          }).filter(Boolean)
-        }
-        
-        console.log('✅ Extracted classnames:', classnames.length, 'items')
-        
-        return {
-          success: true,
-          results: classnames // Return ONLY array of classname strings
-        }
-      }
+      let classnames = []
       
-      // If response format is different
-      if (response && Array.isArray(response)) {
-        const classnames = response.map(item => {
+      // Handle the actual API response format
+      if (response && response.results && Array.isArray(response.results)) {
+        // Extract ONLY the "name" field from each result object
+        classnames = response.results.map(item => {
+          // Get the name field from the object
+          if (item && item.name) {
+            return item.name
+          }
+          return null
+        }).filter(Boolean) // Remove null values
+        
+        console.log('✅ Extracted classnames:', classnames)
+      }
+      // Alternative format: response.data
+      else if (response && response.data && Array.isArray(response.data)) {
+        classnames = response.data.map(item => {
           if (typeof item === 'string') return item
           if (item && item.name) return item.name
           if (item && item.classname) return item.classname
           return null
         }).filter(Boolean)
-        
-        return {
-          success: true,
-          results: classnames
-        }
+      }
+      // Direct array response
+      else if (Array.isArray(response)) {
+        classnames = response.map(item => {
+          if (typeof item === 'string') return item
+          if (item && item.name) return item.name
+          if (item && item.classname) return item.classname
+          return null
+        }).filter(Boolean)
+      }
+      
+      return {
+        success: true,
+        results: classnames // Return ONLY array of classname strings
       }
     }
     
     // For categories endpoint
     if (path === 'categories') {
-      return response
+      return {
+        success: true,
+        categories: response.categories || response.data || response
+      }
     }
     
     // For details endpoint - return as is
@@ -82,7 +80,7 @@ export default defineEventHandler(async (event) => {
       return response
     }
     
-    // Default return
+    // Default return for other endpoints
     return response
     
   } catch (error) {
@@ -92,10 +90,10 @@ export default defineEventHandler(async (event) => {
     if (path === 'search') {
       const searchQuery = (query.q || '').toLowerCase()
       
-      // Mock classnames - ONLY STRINGS (shortened list for readability)
+      // Mock classnames - ONLY STRINGS
       const mockClassnames = [
         // Assault Rifles
-        'AKM', 'AK74', 'AK101', 'AK74U', 'AUG', 'FAL', 'FAMAS', 'M4A1', 'M16A2', 'M70_Tundra',
+        'AKM', 'AK74', 'AK101', 'AK74U', 'AUG', 'FAL', 'FAMAS', 'M4A1', 'M4A1_Black', 'M4A1_Green', 'M16A2', 'M70_Tundra',
         // Sniper Rifles  
         'Mosin9130', 'CZ527', 'CZ550', 'SVD', 'VSS', 'VSD', 'Scout', 'Winchester70', 'Blaze95',
         // SMGs

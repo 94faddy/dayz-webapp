@@ -257,25 +257,61 @@
                      class="bg-gray-700 p-3 rounded">
                   <div class="flex items-start space-x-2">
                     <div class="flex-1">
-                      <input
-                        v-model="attachment.classname"
-                        @input="(e) => searchAttachmentClassname(e, index)"
-                        type="text"
-                        class="w-full px-2 py-1 bg-gray-600 text-white rounded text-sm"
-                        placeholder="Attachment classname"
-                      >
+                      <div class="relative">
+                        <input
+                          v-model="attachment.classname"
+                          @input="(e) => searchAttachmentClassname(e, index)"
+                          @focus="attachmentDropdownIndex = index"
+                          @blur="hideAttachmentDropdown"
+                          type="text"
+                          class="w-full px-2 py-1 bg-gray-600 text-white rounded text-sm"
+                          placeholder="Attachment classname"
+                        >
+                        <!-- Attachment Search Results -->
+                        <div v-if="attachmentDropdownIndex === index && attachmentResults[index] && attachmentResults[index].length > 0" 
+                             class="absolute z-10 w-full mt-1 bg-gray-600 rounded-md shadow-lg max-h-40 overflow-auto">
+                          <button
+                            v-for="result in attachmentResults[index]"
+                            :key="result"
+                            @mousedown="selectAttachmentClassname(index, result)"
+                            type="button"
+                            class="w-full text-left px-2 py-1 text-xs text-white hover:bg-gray-500"
+                          >
+                            {{ result }}
+                          </button>
+                        </div>
+                      </div>
+                      
                       <!-- Nested Attachments -->
                       <div v-if="attachment.attachments && attachment.attachments.length > 0" 
                            class="ml-4 mt-2 space-y-1">
                         <div v-for="(nested, nIndex) in attachment.attachments" 
                              :key="nIndex"
                              class="flex items-center space-x-2">
-                          <input
-                            v-model="nested.classname"
-                            type="text"
-                            class="flex-1 px-2 py-1 bg-gray-600 text-white rounded text-xs"
-                            placeholder="Nested attachment"
-                          >
+                          <div class="relative flex-1">
+                            <input
+                              v-model="nested.classname"
+                              @input="(e) => searchNestedAttachmentClassname(e, index, nIndex)"
+                              @focus="nestedDropdownIndex = `${index}-${nIndex}`"
+                              @blur="hideNestedDropdown"
+                              type="text"
+                              class="w-full px-2 py-1 bg-gray-600 text-white rounded text-xs"
+                              placeholder="Nested attachment"
+                            >
+                            <!-- Nested Search Results -->
+                            <div v-if="nestedDropdownIndex === `${index}-${nIndex}` && nestedResults[`${index}-${nIndex}`] && nestedResults[`${index}-${nIndex}`].length > 0" 
+                                 class="absolute z-10 w-full mt-1 bg-gray-500 rounded-md shadow-lg max-h-32 overflow-auto">
+                              <button
+                                v-for="result in nestedResults[`${index}-${nIndex}`]"
+                                :key="result"
+                                @mousedown="selectNestedClassname(index, nIndex, result)"
+                                type="button"
+                                class="w-full text-left px-2 py-1 text-xs text-white hover:bg-gray-400"
+                              >
+                                {{ result }}
+                              </button>
+                            </div>
+                          </div>
                           <button
                             @click="removeNestedAttachment(index, nIndex)"
                             type="button"
@@ -427,6 +463,16 @@ const classnameResults = ref([])
 const showClassnameDropdown = ref(false)
 const searchTimeout = ref(null)
 
+// For attachments search
+const attachmentResults = ref({})
+const attachmentDropdownIndex = ref(null)
+const attachmentSearchTimeout = ref(null)
+
+// For nested attachments search
+const nestedResults = ref({})
+const nestedDropdownIndex = ref(null)
+const nestedSearchTimeout = ref(null)
+
 const itemModal = ref({
   show: false,
   isEdit: false,
@@ -522,6 +568,10 @@ const openCreateModal = () => {
     attachments: [],
     imageFile: null
   }
+  // Clear search results
+  classnameResults.value = []
+  attachmentResults.value = {}
+  nestedResults.value = {}
 }
 
 const editItem = (item) => {
@@ -532,8 +582,13 @@ const editItem = (item) => {
     attachments: item.attachments ? [...item.attachments] : [],
     imageFile: null
   }
+  // Clear search results
+  classnameResults.value = []
+  attachmentResults.value = {}
+  nestedResults.value = {}
 }
 
+// Main classname search
 const searchClassname = async () => {
   clearTimeout(searchTimeout.value)
   
@@ -549,6 +604,7 @@ const searchClassname = async () => {
       })
       
       if (response.success && response.results) {
+        // Now we expect results to be array of strings
         classnameResults.value = response.results
       }
     } catch (error) {
@@ -570,9 +626,83 @@ const hideClassnameDropdown = () => {
   }, 200)
 }
 
+// Attachment classname search
 const searchAttachmentClassname = async (event, index) => {
-  // Similar to searchClassname but for attachments
-  // You can implement autocomplete for each attachment field
+  clearTimeout(attachmentSearchTimeout.value)
+  
+  attachmentSearchTimeout.value = setTimeout(async () => {
+    const query = itemModal.value.attachments[index].classname
+    if (query.length < 2) {
+      attachmentResults.value[index] = []
+      return
+    }
+    
+    try {
+      const response = await $fetch('/api/admin/classname/search', {
+        params: { q: query }
+      })
+      
+      if (response.success && response.results) {
+        attachmentResults.value[index] = response.results
+      }
+    } catch (error) {
+      console.error('Attachment classname search failed:', error)
+      attachmentResults.value[index] = []
+    }
+  }, 300)
+}
+
+const selectAttachmentClassname = (index, classname) => {
+  itemModal.value.attachments[index].classname = classname
+  attachmentResults.value[index] = []
+  attachmentDropdownIndex.value = null
+}
+
+const hideAttachmentDropdown = () => {
+  setTimeout(() => {
+    attachmentDropdownIndex.value = null
+  }, 200)
+}
+
+// Nested attachment classname search
+const searchNestedAttachmentClassname = async (event, parentIndex, nestedIndex) => {
+  clearTimeout(nestedSearchTimeout.value)
+  
+  nestedSearchTimeout.value = setTimeout(async () => {
+    const query = itemModal.value.attachments[parentIndex].attachments[nestedIndex].classname
+    const key = `${parentIndex}-${nestedIndex}`
+    
+    if (query.length < 2) {
+      nestedResults.value[key] = []
+      return
+    }
+    
+    try {
+      const response = await $fetch('/api/admin/classname/search', {
+        params: { q: query }
+      })
+      
+      if (response.success && response.results) {
+        nestedResults.value[key] = response.results
+      }
+    } catch (error) {
+      console.error('Nested classname search failed:', error)
+      nestedResults.value[key] = []
+    }
+  }, 300)
+}
+
+const selectNestedClassname = (parentIndex, nestedIndex, classname) => {
+  itemModal.value.attachments[parentIndex].attachments[nestedIndex].classname = classname
+  const key = `${parentIndex}-${nestedIndex}`
+  nestedResults.value[key] = []
+  nestedDropdownIndex.value = null
+}
+
+const hideNestedDropdown = () => {
+  setTimeout(() => {
+    nestedDropdownIndex.value = null
+  }, 200)
 }
 
 const addAttachment = () => {
@@ -585,6 +715,8 @@ const addAttachment = () => {
 
 const removeAttachment = (index) => {
   itemModal.value.attachments.splice(index, 1)
+  // Clean up search results
+  delete attachmentResults.value[index]
 }
 
 const addNestedAttachment = (parentIndex) => {
@@ -599,6 +731,9 @@ const addNestedAttachment = (parentIndex) => {
 
 const removeNestedAttachment = (parentIndex, nestedIndex) => {
   itemModal.value.attachments[parentIndex].attachments.splice(nestedIndex, 1)
+  // Clean up search results
+  const key = `${parentIndex}-${nestedIndex}`
+  delete nestedResults.value[key]
 }
 
 const handleImageUpload = (event) => {
