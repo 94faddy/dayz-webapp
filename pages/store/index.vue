@@ -46,18 +46,19 @@
           v-for="category in categories"
           :key="category.value"
           @click="selectedCategory = category.value"
-          class="px-6 py-3 rounded-lg font-medium transition-all duration-200"
+          class="px-6 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2"
           :class="selectedCategory === category.value 
-            ? 'bg-red-600 text-white' 
+            ? 'bg-red-600 text-white shadow-lg' 
             : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'"
         >
-          <div class="flex items-center space-x-2">
-            <component :is="category.icon" class="w-5 h-5" />
-            <span>{{ category.name }}</span>
-            <span class="bg-gray-700 text-xs px-2 py-1 rounded-full ml-2">
-              {{ getItemCountByCategory(category.value) }}
-            </span>
-          </div>
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                  :d="getCategoryIconPath(category.value)"></path>
+          </svg>
+          <span>{{ category.name }}</span>
+          <span class="bg-black bg-opacity-30 text-xs px-2 py-0.5 rounded-full">
+            {{ category.count }}
+          </span>
         </button>
       </div>
       
@@ -71,7 +72,7 @@
           <!-- Item Image -->
           <div class="relative h-48 bg-gray-700 overflow-hidden">
             <img
-              :src="item.image || '/placeholder-item.jpg'"
+              :src="item.image_url || '/placeholder-item.jpg'"
               :alt="item.name"
               class="w-full h-full object-cover"
               @error="handleImageError"
@@ -93,26 +94,46 @@
                 <span class="text-yellow-400 font-bold">{{ formatNumber(item.price) }}</span>
               </div>
             </div>
+            <!-- Stock Badge -->
+            <div v-if="!item.stock_unlimited && item.stock_quantity < 10" 
+                 class="absolute bottom-3 left-3 bg-red-600/90 text-white text-xs px-2 py-1 rounded">
+              Only {{ item.stock_quantity }} left!
+            </div>
           </div>
           
           <!-- Item Details -->
           <div class="p-6">
             <h3 class="text-lg font-semibold text-white mb-2">{{ item.name }}</h3>
-            <p class="text-gray-400 text-sm mb-4 line-clamp-2">{{ item.description }}</p>
+            <p class="text-gray-400 text-sm mb-4 line-clamp-2">
+              {{ item.description || 'High-quality item for your survival needs.' }}
+            </p>
+            
+            <!-- Item Info -->
+            <div class="flex items-center justify-between text-xs text-gray-500 mb-4">
+              <span>{{ item.classname }}</span>
+              <span v-if="item.attachments && item.attachments.length > 0" class="text-green-400">
+                +{{ item.attachments.length }} attachments
+              </span>
+            </div>
             
             <!-- Action Button -->
             <button
               @click="purchaseItem(item)"
-              :disabled="!user || (user && user.points < item.price)"
+              :disabled="!user || (user && user.points < item.price) || (!item.stock_unlimited && item.stock_quantity === 0)"
               class="w-full py-3 rounded-lg font-medium transition-all duration-200"
               :class="!user 
                 ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
-                : user.points < item.price 
-                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
-                  : 'dayz-button-primary hover:shadow-lg'"
+                : (!item.stock_unlimited && item.stock_quantity === 0)
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  : user.points < item.price 
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
+                    : 'dayz-button-primary hover:shadow-lg'"
             >
               <template v-if="!user">
                 Login to Purchase
+              </template>
+              <template v-else-if="!item.stock_unlimited && item.stock_quantity === 0">
+                Out of Stock
               </template>
               <template v-else-if="user.points < item.price">
                 Insufficient Points
@@ -156,92 +177,20 @@ definePageMeta({
 const user = useState('auth.user')
 const loading = ref(true)
 const selectedCategory = ref('all')
-
-// Categories
-const categories = [
-  { name: 'All Items', value: 'all', icon: 'IconGrid' },
-  { name: 'Weapons', value: 'weapon', icon: 'IconSword' },
-  { name: 'Items', value: 'item', icon: 'IconPackage' },
-  { name: 'Vehicles', value: 'vehicle', icon: 'IconTruck' },
-  { name: 'Money', value: 'money', icon: 'IconCoin' }
-]
-
-// Mock store items (replace with API call)
-const storeItems = ref([
-  {
-    id: 1,
-    name: 'AK-74 Assault Rifle',
-    description: 'Powerful assault rifle with high damage and good range. Perfect for mid to long-range combat.',
-    price: 15000,
-    category: 'weapon',
-    image: '/items/ak74.jpg',
-    is_active: true
-  },
-  {
-    id: 2,
-    name: 'Medical Kit',
-    description: 'Complete medical kit with bandages, morphine, and antibiotics. Essential for survival.',
-    price: 5000,
-    category: 'item',
-    image: '/items/medkit.jpg',
-    is_active: true
-  },
-  {
-    id: 3,
-    name: 'Offroad Hatchback',
-    description: 'Reliable 4-wheel drive vehicle. Great for exploring the wasteland and carrying supplies.',
-    price: 50000,
-    category: 'vehicle',
-    image: '/items/hatchback.jpg',
-    is_active: true
-  },
-  {
-    id: 4,
-    name: '10,000 Rubles',
-    description: 'In-game currency that can be used to purchase items from NPCs and traders.',
-    price: 2000,
-    category: 'money',
-    image: '/items/rubles.jpg',
-    is_active: true
-  },
-  {
-    id: 5,
-    name: 'Night Vision Goggles',
-    description: 'See clearly in the dark. Essential equipment for night operations and exploration.',
-    price: 12000,
-    category: 'item',
-    image: '/items/nvg.jpg',
-    is_active: true
-  },
-  {
-    id: 6,
-    name: 'M4A1 Carbine',
-    description: 'American-made assault rifle with excellent accuracy and customization options.',
-    price: 18000,
-    category: 'weapon',
-    image: '/items/m4a1.jpg',
-    is_active: true
-  }
-])
+const storeItems = ref([])
+const categories = ref([])
 
 // Computed
 const filteredItems = computed(() => {
   if (selectedCategory.value === 'all') {
-    return storeItems.value.filter(item => item.is_active)
+    return storeItems.value
   }
-  return storeItems.value.filter(item => item.category === selectedCategory.value && item.is_active)
+  return storeItems.value.filter(item => item.category === selectedCategory.value)
 })
 
 // Methods
 const formatNumber = (num) => {
   return new Intl.NumberFormat().format(num)
-}
-
-const getItemCountByCategory = (category) => {
-  if (category === 'all') {
-    return storeItems.value.filter(item => item.is_active).length
-  }
-  return storeItems.value.filter(item => item.category === category && item.is_active).length
 }
 
 const getCategoryName = (category) => {
@@ -264,8 +213,42 @@ const getCategoryBadgeClass = (category) => {
   return classMap[category] || 'bg-gray-600 text-white'
 }
 
+const getCategoryIconPath = (category) => {
+  const paths = {
+    all: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z',
+    weapon: 'M13 10V3L4 14h7v7l9-11h-7z',
+    item: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+    vehicle: 'M5 13l4 4L19 7',
+    money: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+  }
+  return paths[category] || paths.all
+}
+
 const handleImageError = (event) => {
   event.target.src = '/placeholder-item.jpg'
+}
+
+// Load store items from database
+const loadStoreItems = async () => {
+  try {
+    loading.value = true
+    const response = await $fetch('/api/store/items')
+    
+    if (response.success) {
+      storeItems.value = response.items
+      
+      // Transform categories for display
+      categories.value = response.categories.map(cat => ({
+        name: cat.name,
+        value: cat.value,
+        count: cat.count
+      }))
+    }
+  } catch (error) {
+    console.error('Failed to load store items:', error)
+  } finally {
+    loading.value = false
+  }
 }
 
 const purchaseItem = async (item) => {
@@ -303,16 +286,38 @@ const purchaseItem = async (item) => {
     return
   }
   
+  // Show item details with attachments
+  let itemDetailsHtml = `
+    <div class="text-left">
+      <p class="mb-2">Item: <strong>${item.name}</strong></p>
+      <p class="mb-2">Classname: <code class="bg-gray-700 px-1 rounded">${item.classname}</code></p>
+      <p class="mb-2">Price: <strong>${formatNumber(item.price)} Points</strong></p>
+  `
+  
+  // Show attachments if any
+  if (item.attachments && item.attachments.length > 0) {
+    itemDetailsHtml += '<p class="mb-2 mt-3">Includes:</p><ul class="ml-4 text-sm text-gray-400">'
+    item.attachments.forEach(att => {
+      itemDetailsHtml += `<li>• ${att.classname} x${att.quantity || 1}</li>`
+      if (att.attachments && att.attachments.length > 0) {
+        att.attachments.forEach(nested => {
+          itemDetailsHtml += `<li class="ml-4">• ${nested.classname} x${nested.quantity || 1}</li>`
+        })
+      }
+    })
+    itemDetailsHtml += '</ul>'
+  }
+  
+  itemDetailsHtml += `
+      <hr class="my-3 border-gray-600">
+      <p class="mb-2">Your Balance: <strong>${formatNumber(user.value.points)} Points</strong></p>
+      <p class="text-sm text-gray-400">After purchase: <strong>${formatNumber(user.value.points - item.price)} Points</strong></p>
+    </div>
+  `
+  
   const result = await Swal.fire({
     title: 'Confirm Purchase',
-    html: `
-      <div class="text-left">
-        <p class="mb-2">Item: <strong>${item.name}</strong></p>
-        <p class="mb-2">Price: <strong>${formatNumber(item.price)} Points</strong></p>
-        <p class="mb-4">Your Balance: <strong>${formatNumber(user.value.points)} Points</strong></p>
-        <p class="text-sm text-gray-400">After purchase: <strong>${formatNumber(user.value.points - item.price)} Points</strong></p>
-      </div>
-    `,
+    html: itemDetailsHtml,
     icon: 'question',
     background: '#1f2937',
     color: '#fff',
@@ -340,16 +345,28 @@ const purchaseItem = async (item) => {
           title: 'Purchase Successful!',
           html: `
             <div class="text-left">
-              <p class="mb-2">✅ <strong>${item.name}</strong> purchased successfully!</p>
+              <p class="mb-2">✅ <strong>${item.name}</strong> has been added to your inventory!</p>
+              <p class="mb-2">Purchase ID: <strong>#${response.purchaseId}</strong></p>
               <p class="mb-2">Remaining Points: <strong>${formatNumber(response.newBalance)}</strong></p>
-              <p class="text-sm text-gray-400">Item will be delivered to your character in-game.</p>
+              <hr class="my-3 border-gray-600">
+              <p class="text-sm text-gray-400">
+                <strong>How to claim your item:</strong><br>
+                1. Join the DayZ server<br>
+                2. The item will be automatically delivered to your character<br>
+                3. Check your inventory or vicinity<br>
+                4. If you don't receive it within 5 minutes, contact support
+              </p>
             </div>
           `,
           icon: 'success',
           background: '#1f2937',
           color: '#fff',
-          confirmButtonColor: '#dc2626'
+          confirmButtonColor: '#dc2626',
+          confirmButtonText: 'Great!'
         })
+        
+        // Reload items to update stock
+        await loadStoreItems()
       }
     } catch (error) {
       console.error('Purchase error:', error)
@@ -378,10 +395,31 @@ const showTopUpModal = async () => {
       <div class="text-left space-y-4">
         <p class="text-gray-300">Select the amount you want to top up:</p>
         <div class="grid grid-cols-2 gap-2">
-          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white" data-amount="1000">1,000 Points<br><small>$5.00</small></button>
-          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white" data-amount="2500">2,500 Points<br><small>$10.00</small></button>
-          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white" data-amount="5000">5,000 Points<br><small>$20.00</small></button>
-          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white" data-amount="10000">10,000 Points<br><small>$35.00</small></button>
+          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white transition-all" data-amount="1000">
+            <div class="text-lg font-bold">1,000</div>
+            <div class="text-xs text-gray-400">Points</div>
+            <div class="text-sm mt-1">฿50</div>
+          </button>
+          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white transition-all" data-amount="2500">
+            <div class="text-lg font-bold">2,500</div>
+            <div class="text-xs text-gray-400">Points</div>
+            <div class="text-sm mt-1">฿100</div>
+          </button>
+          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white transition-all" data-amount="5000">
+            <div class="text-lg font-bold">5,000</div>
+            <div class="text-xs text-gray-400">Points</div>
+            <div class="text-sm mt-1">฿200</div>
+          </button>
+          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white transition-all" data-amount="10000">
+            <div class="text-lg font-bold">10,000</div>
+            <div class="text-xs text-gray-400">Points</div>
+            <div class="text-sm mt-1 text-green-400">฿350</div>
+            <div class="text-xs text-green-400">Save ฿50!</div>
+          </button>
+        </div>
+        <div class="mt-4 p-3 bg-gray-700 rounded">
+          <p class="text-sm text-gray-300">Selected: <span id="selected-amount" class="font-bold text-yellow-400">None</span></p>
+          <p class="text-xs text-gray-400 mt-1">Payment methods: TrueMoney Wallet, PromptPay, Bank Transfer</p>
         </div>
       </div>
     `,
@@ -399,8 +437,11 @@ const showTopUpModal = async () => {
     didOpen: () => {
       document.querySelectorAll('.topup-option').forEach(btn => {
         btn.addEventListener('click', (e) => {
-          document.querySelectorAll('.topup-option').forEach(b => b.classList.remove('selected', 'bg-red-600'))
-          e.target.classList.add('selected', 'bg-red-600')
+          document.querySelectorAll('.topup-option').forEach(b => {
+            b.classList.remove('selected', 'bg-red-600', 'ring-2', 'ring-red-400')
+          })
+          btn.classList.add('selected', 'bg-red-600', 'ring-2', 'ring-red-400')
+          document.getElementById('selected-amount').textContent = btn.dataset.amount + ' Points'
         })
       })
     }
@@ -409,7 +450,19 @@ const showTopUpModal = async () => {
   if (amount) {
     await Swal.fire({
       title: 'Payment Integration',
-      text: 'Payment gateway integration would be implemented here (PayPal, Stripe, etc.)',
+      html: `
+        <div class="text-left">
+          <p class="mb-4">Amount: <strong>${formatNumber(amount)} Points</strong></p>
+          <p class="text-sm text-gray-400">Payment gateway integration will be implemented here.</p>
+          <p class="text-sm text-gray-400 mt-2">Available payment methods:</p>
+          <ul class="text-sm text-gray-400 mt-1 ml-4">
+            <li>• TrueMoney Wallet</li>
+            <li>• PromptPay QR Code</li>
+            <li>• Bank Transfer</li>
+            <li>• Credit/Debit Card</li>
+          </ul>
+        </div>
+      `,
       icon: 'info',
       background: '#1f2937',
       color: '#fff',
@@ -420,23 +473,8 @@ const showTopUpModal = async () => {
 
 // Load store items on mount
 onMounted(async () => {
-  try {
-    // Replace with actual API call
-    // const response = await $fetch('/api/store/items')
-    // storeItems.value = response.items
-    loading.value = false
-  } catch (error) {
-    console.error('Failed to load store items:', error)
-    loading.value = false
-  }
+  await loadStoreItems()
 })
-
-// Dynamic icon components (simplified for this example)
-const IconGrid = { template: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>' }
-const IconSword = { template: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>' }
-const IconPackage = { template: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>' }
-const IconTruck = { template: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>' }
-const IconCoin = { template: '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd"/></svg>' }
 </script>
 
 <style scoped>
@@ -459,5 +497,35 @@ const IconCoin = { template: '<svg class="w-5 h-5" fill="currentColor" viewBox="
 .topup-option.selected {
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.loader {
+  border: 3px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 3px solid #dc2626;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.dayz-card {
+  background: linear-gradient(to bottom, #1f2937, #111827);
+  border: 1px solid #374151;
+  border-radius: 0.5rem;
+}
+
+.dayz-button-primary {
+  background: linear-gradient(to right, #dc2626, #b91c1c);
+  color: white;
+  font-weight: 500;
+}
+
+.dayz-button-primary:hover {
+  background: linear-gradient(to right, #ef4444, #dc2626);
 }
 </style>
