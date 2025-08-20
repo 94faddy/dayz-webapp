@@ -1,4 +1,4 @@
-// server/api/store/purchase.post.js
+// server/api/store/purchase.post.js - FIXED AUTO DELIVERY
 import { executeQuery } from '~/utils/database.js'
 
 export default defineEventHandler(async (event) => {
@@ -52,9 +52,9 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    // Get user current points
+    // Get user current data (including steamid64)
     const [user] = await executeQuery(
-      'SELECT points, is_active, is_banned FROM users WHERE id = ?',
+      'SELECT points, steamid64, is_active, is_banned FROM users WHERE id = ?',
       [userId]
     )
     
@@ -62,6 +62,14 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 403,
         statusMessage: 'Account not active or banned'
+      })
+    }
+    
+    // Validate Steam ID
+    if (!user.steamid64 || !/^7656119[0-9]{10}$/.test(user.steamid64)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Invalid Steam ID. Please update your profile.'
       })
     }
     
@@ -138,6 +146,7 @@ export default defineEventHandler(async (event) => {
       const config = useRuntimeConfig()
       let deliveryAttempted = false
       let deliverySuccess = false
+      let deliveryMessage = 'Item will be delivered manually'
       
       try {
         // Check if auto delivery is enabled
@@ -145,44 +154,81 @@ export default defineEventHandler(async (event) => {
           "SELECT setting_value FROM system_settings WHERE setting_key = 'auto_delivery'"
         )
         
-        if (autoDeliverySetting?.setting_value === 'true') {
+        if (autoDeliverySetting?.setting_value === 'true' || process.env.AUTO_DELIVERY === 'true') {
           deliveryAttempted = true
+          console.log('🚀 Attempting auto delivery for order:', orderNumber)
           
-          // Prepare item data for API
+          // Prepare item data according to DayZ API documentation
           const itemData = {
-            classname: item.classname,
-            quantity: quantity
+            classname: item.classname.trim(),
+            quantity: parseInt(quantity)
           }
           
           // Add attachments if present
           if (item.attachments) {
             try {
-              const attachments = typeof item.attachments === 'string' 
-                ? JSON.parse(item.attachments) 
-                : item.attachments
-              if (attachments && attachments.length > 0) {
-                itemData.attachments = attachments
+              let attachments
+              if (typeof item.attachments === 'string') {
+                attachments = JSON.parse(item.attachments)
+              } else {
+                attachments = item.attachments
+              }
+              
+              // Validate and format attachments
+              if (Array.isArray(attachments) && attachments.length > 0) {
+                const validAttachments = attachments.filter(att => 
+                  att.classname && typeof att.classname === 'string'
+                ).map(att => ({
+                  classname: att.classname.trim(),
+                  quantity: parseInt(att.quantity) || 1,
+                  // Add nested attachments if present
+                  ...(att.attachments && Array.isArray(att.attachments) && att.attachments.length > 0 
+                    ? { attachments: att.attachments.map(nested => ({
+                        classname: nested.classname.trim(),
+                        quantity: parseInt(nested.quantity) || 1
+                      })) }
+                    : {}
+                  )
+                }))
+                
+                if (validAttachments.length > 0) {
+                  itemData.attachments = validAttachments
+                }
               }
             } catch (e) {
               console.error('Failed to parse attachments:', e)
             }
           }
           
+          // Prepare API request body
+          const apiRequestBody = {
+            steamId: user.steamid64,
+            item: itemData
+          }
+          
+          console.log('🚀 Sending auto delivery request:', {
+            url: `${config.dzsvApi}/v1/itemgiver/add-item`,
+            steamId: user.steamid64,
+            item: itemData
+          })
+          
           // Call DayZ API to deliver item
           const deliveryResponse = await $fetch(`${config.dzsvApi}/v1/itemgiver/add-item`, {
             method: 'POST',
             headers: {
               'X-API-Key': config.dzsvApiKey,
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
             },
-            body: {
-              steamId: user.steamid64,
-              item: itemData
-            }
+            body: apiRequestBody,
+            timeout: 30000
           })
           
-          if (deliveryResponse.success) {
+          console.log('✅ Auto delivery API response:', deliveryResponse)
+          
+          if (deliveryResponse && deliveryResponse.success === true) {
             deliverySuccess = true
+            deliveryMessage = 'Item delivered automatically to your character'
             
             // Update delivery status
             await executeQuery(
@@ -204,39 +250,63 @@ export default defineEventHandler(async (event) => {
               'UPDATE purchase_orders SET status = "completed", completed_at = NOW() WHERE id = ?',
               [orderId]
             )
+          } else {
+            // API returned failure
+            const apiErrorMessage = deliveryResponse?.message || 
+                                  deliveryResponse?.error || 
+                                  'Auto delivery failed'
+            deliveryMessage = `Auto delivery failed: ${apiErrorMessage}`
+            
+            console.error('❌ Auto delivery API failure:', deliveryResponse)
+            
+            await executeQuery(
+              `UPDATE purchase_order_items 
+               SET delivery_status = 'failed', delivery_data = ?
+               WHERE order_id = ?`,
+              [JSON.stringify(deliveryResponse), orderId]
+            )
           }
         }
       } catch (deliveryError) {
-        console.error('Auto delivery failed:', deliveryError)
-        // Don't fail the purchase, just log the delivery failure
+        console.error('❌ Auto delivery error:', deliveryError)
+        deliveryMessage = `Auto delivery failed: ${deliveryError.message}`
+        
+        // Log the delivery failure
         await executeQuery(
           `UPDATE purchase_order_items 
            SET delivery_status = 'failed', delivery_data = ?
            WHERE order_id = ?`,
-          [JSON.stringify({ error: deliveryError.message }), orderId]
+          [JSON.stringify({ 
+            error: deliveryError.message,
+            status: deliveryError.status || 500,
+            timestamp: new Date().toISOString()
+          }), orderId]
         )
       }
       
       return {
         success: true,
         message: 'Purchase completed successfully',
+        purchaseId: orderId, // เปลี่ยนจาก orderNumber เป็น orderId
         orderNumber: orderNumber,
         orderId: orderId,
         newBalance: updatedUser.points,
         item: {
           name: item.name,
+          classname: item.classname,
           quantity,
           totalPrice
         },
         delivery: {
           attempted: deliveryAttempted,
           success: deliverySuccess,
-          status: deliverySuccess ? 'delivered' : (deliveryAttempted ? 'failed' : 'pending')
+          status: deliverySuccess ? 'delivered' : (deliveryAttempted ? 'failed' : 'pending'),
+          message: deliveryMessage
         }
       }
       
     } catch (error) {
-      console.error('Purchase transaction error:', error)
+      console.error('❌ Purchase transaction error:', error)
       throw error
     }
     
@@ -245,7 +315,7 @@ export default defineEventHandler(async (event) => {
       throw error
     }
     
-    console.error('Purchase error:', error)
+    console.error('❌ Purchase error:', error)
     throw createError({
       statusCode: 500,
       statusMessage: 'Purchase failed'

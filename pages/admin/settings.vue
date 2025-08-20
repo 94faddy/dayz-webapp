@@ -26,120 +26,43 @@
             </div>
           </div>
           
-          <!-- General Settings -->
-          <div v-if="activeTab === 'general'" class="bg-gray-800 rounded-lg p-6">
-            <h2 class="text-lg font-semibold text-white mb-4">General Settings</h2>
-            
-            <div class="space-y-6">
-              <!-- Auto Approve Users -->
-              <div class="flex items-center justify-between">
-                <div>
-                  <h3 class="text-sm font-medium text-white">Auto Approve Users</h3>
-                  <p class="text-sm text-gray-400">Automatically approve new user registrations</p>
-                  <p v-if="serverConfig.auto_approve_users === 'true'" class="text-xs text-green-400 mt-1">
-                    ✅ New users can login immediately after registration
-                  </p>
-                  <p v-else class="text-xs text-yellow-400 mt-1">
-                    ⚠️ New users must wait for admin approval
-                  </p>
-                </div>
-                <button
-                  @click="toggleAutoApprove"
-                  :class="[
-                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    serverConfig.auto_approve_users === 'true' ? 'bg-green-600' : 'bg-gray-600'
-                  ]"
-                >
-                  <span
-                    :class="[
-                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      serverConfig.auto_approve_users === 'true' ? 'translate-x-6' : 'translate-x-1'
-                    ]"
-                  />
-                </button>
-              </div>
-              
-              <!-- Max Name Changes Per Month -->
-              <div>
-                <label class="block text-sm font-medium text-white mb-2">
-                  Max Name Changes Per Month
-                </label>
-                <div class="flex items-center space-x-3">
-                  <input
-                    v-model="serverConfig.max_name_changes_per_month"
-                    type="number"
-                    min="0"
-                    max="10"
-                    class="w-24 px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
-                  >
-                  <button
-                    @click="updateSetting('server_config', 'max_name_changes_per_month', serverConfig.max_name_changes_per_month)"
-                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Update
-                  </button>
-                </div>
-                <p class="text-xs text-gray-400 mt-1">
-                  Number of times a user can change their name per month (0 = disabled)
-                </p>
-              </div>
-            </div>
-          </div>
-          
           <!-- Store Settings -->
           <div v-if="activeTab === 'store'" class="bg-gray-800 rounded-lg p-6">
             <h2 class="text-lg font-semibold text-white mb-4">Store Settings</h2>
             
             <div class="space-y-6">
-              <!-- Point Exchange Rate -->
-              <div>
-                <label class="block text-sm font-medium text-white mb-2">
-                  Point Exchange Rate
-                </label>
-                <div class="flex items-center space-x-3">
-                  <input
-                    v-model="pointExchangeRate"
-                    type="number"
-                    min="1"
-                    class="w-32 px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
-                  >
-                  <span class="text-gray-400">Points per 1 THB</span>
-                  <button
-                    @click="updateSetting('system_settings', 'point_exchange_rate', pointExchangeRate)"
-                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Update
-                  </button>
-                </div>
-                <p class="text-xs text-gray-400 mt-1">
-                  How many points a user gets for 1 THB payment
-                </p>
-              </div>
-              
               <!-- Auto Delivery -->
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
                 <div>
                   <h3 class="text-sm font-medium text-white">Auto Delivery</h3>
                   <p class="text-sm text-gray-400">Automatically deliver items after purchase</p>
+                  <p v-if="autoDeliveryEnabled" class="text-xs text-green-400 mt-1">
+                    ✅ Items will be delivered automatically to players
+                  </p>
+                  <p v-else class="text-xs text-yellow-400 mt-1">
+                    ⚠️ Items require manual delivery
+                  </p>
                 </div>
                 <button
-                  @click="toggleSystemSetting('auto_delivery')"
+                  @click="toggleAutoDelivery"
+                  :disabled="loading"
                   :class="[
                     'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    systemSettings.delivery?.auto_delivery?.value === 'true' ? 'bg-green-600' : 'bg-gray-600'
+                    autoDeliveryEnabled ? 'bg-green-600' : 'bg-gray-600',
+                    loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   ]"
                 >
                   <span
                     :class="[
                       'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      systemSettings.delivery?.auto_delivery?.value === 'true' ? 'translate-x-6' : 'translate-x-1'
+                      autoDeliveryEnabled ? 'translate-x-6' : 'translate-x-1'
                     ]"
                   />
                 </button>
               </div>
               
               <!-- Max Delivery Attempts -->
-              <div>
+              <div class="p-4 bg-gray-700 rounded-lg">
                 <label class="block text-sm font-medium text-white mb-2">
                   Max Delivery Attempts
                 </label>
@@ -149,37 +72,129 @@
                     type="number"
                     min="1"
                     max="10"
-                    class="w-24 px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
+                    class="w-24 px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
                   >
                   <button
-                    @click="updateSetting('system_settings', 'max_delivery_attempts', maxDeliveryAttempts)"
-                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    @click="updateMaxDeliveryAttempts"
+                    :disabled="loading"
+                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                   >
                     Update
                   </button>
                 </div>
+                <p class="text-xs text-gray-400 mt-1">
+                  Number of times system will try to deliver failed items
+                </p>
               </div>
               
               <!-- Store Enabled -->
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
                 <div>
                   <h3 class="text-sm font-medium text-white">Store Enabled</h3>
-                  <p class="text-sm text-gray-400">Enable or disable the store</p>
+                  <p class="text-sm text-gray-400">Enable or disable the entire store</p>
+                  <p v-if="storeEnabled" class="text-xs text-green-400 mt-1">
+                    ✅ Store is accessible to users
+                  </p>
+                  <p v-else class="text-xs text-red-400 mt-1">
+                    ❌ Store is disabled for maintenance
+                  </p>
                 </div>
                 <button
-                  @click="toggleSystemSetting('store_enabled')"
+                  @click="toggleStoreEnabled"
+                  :disabled="loading"
                   :class="[
                     'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    systemSettings.store?.store_enabled?.value === 'true' ? 'bg-green-600' : 'bg-gray-600'
+                    storeEnabled ? 'bg-green-600' : 'bg-red-600',
+                    loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   ]"
                 >
                   <span
                     :class="[
                       'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      systemSettings.store?.store_enabled?.value === 'true' ? 'translate-x-6' : 'translate-x-1'
+                      storeEnabled ? 'translate-x-6' : 'translate-x-1'
                     ]"
                   />
                 </button>
+              </div>
+              
+              <!-- Point Exchange Rate -->
+              <div class="p-4 bg-gray-700 rounded-lg">
+                <label class="block text-sm font-medium text-white mb-2">
+                  Point Exchange Rate
+                </label>
+                <div class="flex items-center space-x-3">
+                  <input
+                    v-model="pointExchangeRate"
+                    type="number"
+                    min="1"
+                    class="w-32 px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
+                  >
+                  <span class="text-gray-400">Points per 1 THB</span>
+                  <button
+                    @click="updatePointExchangeRate"
+                    :disabled="loading"
+                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Update
+                  </button>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">
+                  How many points a user gets for 1 THB payment
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- General Settings -->
+          <div v-if="activeTab === 'general'" class="bg-gray-800 rounded-lg p-6">
+            <h2 class="text-lg font-semibold text-white mb-4">General Settings</h2>
+            
+            <div class="space-y-6">
+              <!-- Auto Approve Users -->
+              <div class="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+                <div>
+                  <h3 class="text-sm font-medium text-white">Auto Approve Users</h3>
+                  <p class="text-sm text-gray-400">Automatically approve new user registrations</p>
+                </div>
+                <button
+                  @click="toggleAutoApprove"
+                  :disabled="loading"
+                  :class="[
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                    autoApproveEnabled ? 'bg-green-600' : 'bg-gray-600',
+                    loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                  ]"
+                >
+                  <span
+                    :class="[
+                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                      autoApproveEnabled ? 'translate-x-6' : 'translate-x-1'
+                    ]"
+                  />
+                </button>
+              </div>
+              
+              <!-- Max Name Changes Per Month -->
+              <div class="p-4 bg-gray-700 rounded-lg">
+                <label class="block text-sm font-medium text-white mb-2">
+                  Max Name Changes Per Month
+                </label>
+                <div class="flex items-center space-x-3">
+                  <input
+                    v-model="maxNameChanges"
+                    type="number"
+                    min="0"
+                    max="10"
+                    class="w-24 px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
+                  >
+                  <button
+                    @click="updateMaxNameChanges"
+                    :disabled="loading"
+                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Update
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -190,70 +205,30 @@
             
             <div class="space-y-6">
               <!-- Maintenance Mode -->
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
                 <div>
                   <h3 class="text-sm font-medium text-white">Maintenance Mode</h3>
                   <p class="text-sm text-gray-400">Put the site into maintenance mode</p>
-                  <p v-if="systemSettings.system?.maintenance_mode?.value === 'true'" class="text-xs text-red-400 mt-1">
-                    ⚠️ Site is currently in maintenance mode - users cannot access
+                  <p v-if="maintenanceMode" class="text-xs text-red-400 mt-1">
+                    ⚠️ Site is currently in maintenance mode
                   </p>
                 </div>
                 <button
-                  @click="toggleSystemSetting('maintenance_mode')"
+                  @click="toggleMaintenanceMode"
+                  :disabled="loading"
                   :class="[
                     'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    systemSettings.system?.maintenance_mode?.value === 'true' ? 'bg-red-600' : 'bg-gray-600'
+                    maintenanceMode ? 'bg-red-600' : 'bg-gray-600',
+                    loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   ]"
                 >
                   <span
                     :class="[
                       'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      systemSettings.system?.maintenance_mode?.value === 'true' ? 'translate-x-6' : 'translate-x-1'
+                      maintenanceMode ? 'translate-x-6' : 'translate-x-1'
                     ]"
                   />
                 </button>
-              </div>
-              
-              <!-- Site Name -->
-              <div>
-                <label class="block text-sm font-medium text-white mb-2">
-                  Site Name
-                </label>
-                <div class="flex items-center space-x-3">
-                  <input
-                    v-model="siteName"
-                    type="text"
-                    class="flex-1 px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
-                  >
-                  <button
-                    @click="updateSetting('system_settings', 'site_name', siteName)"
-                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Update
-                  </button>
-                </div>
-              </div>
-              
-              <!-- API Timeout -->
-              <div>
-                <label class="block text-sm font-medium text-white mb-2">
-                  API Timeout (seconds)
-                </label>
-                <div class="flex items-center space-x-3">
-                  <input
-                    v-model="apiTimeout"
-                    type="number"
-                    min="5"
-                    max="300"
-                    class="w-24 px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
-                  >
-                  <button
-                    @click="updateSetting('system_settings', 'api_timeout', apiTimeout)"
-                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Update
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -284,16 +259,18 @@ const tabs = [
   { id: 'system', name: 'System' }
 ]
 
-const activeTab = ref('general')
-const serverConfig = ref({})
-const systemSettings = ref({})
+const activeTab = ref('store') // เริ่มต้นที่ Store tab
+const loading = ref(false)
 const message = ref({ show: false, type: '', text: '' })
 
-// Separate refs for form inputs to avoid optional chaining in v-model
-const pointExchangeRate = ref('100')
+// Separate refs สำหรับแต่ละ setting
+const autoDeliveryEnabled = ref(false)
 const maxDeliveryAttempts = ref('3')
-const siteName = ref('DayZ Nightro Store')
-const apiTimeout = ref('30')
+const storeEnabled = ref(true)
+const pointExchangeRate = ref('100')
+const autoApproveEnabled = ref(false)
+const maxNameChanges = ref('1')
+const maintenanceMode = ref(false)
 
 onMounted(async () => {
   await loadSettings()
@@ -301,60 +278,210 @@ onMounted(async () => {
 
 const loadSettings = async () => {
   try {
+    loading.value = true
     const response = await $fetch('/api/admin/settings')
-    serverConfig.value = response.serverConfig
-    systemSettings.value = response.systemSettings
     
-    // Update individual refs
-    pointExchangeRate.value = systemSettings.value.payment?.point_exchange_rate?.value || '100'
-    maxDeliveryAttempts.value = systemSettings.value.delivery?.max_delivery_attempts?.value || '3'
-    siteName.value = systemSettings.value.general?.site_name?.value || 'DayZ Nightro Store'
-    apiTimeout.value = systemSettings.value.api?.api_timeout?.value || '30'
+    console.log('📊 Loaded settings:', response)
+    
+    // Server config
+    const serverConfig = response.serverConfig || {}
+    autoApproveEnabled.value = serverConfig.auto_approve_users === 'true'
+    maxNameChanges.value = serverConfig.max_name_changes_per_month || '1'
+    
+    // System settings
+    const systemSettings = response.systemSettings || {}
+    
+    // Store/Delivery settings
+    autoDeliveryEnabled.value = systemSettings.delivery?.auto_delivery?.value === 'true'
+    maxDeliveryAttempts.value = systemSettings.delivery?.max_delivery_attempts?.value || '3'
+    storeEnabled.value = systemSettings.store?.store_enabled?.value !== 'false' // default true
+    pointExchangeRate.value = systemSettings.payment?.point_exchange_rate?.value || '100'
+    
+    // System settings
+    maintenanceMode.value = systemSettings.system?.maintenance_mode?.value === 'true'
+    
+    console.log('✅ Settings loaded:', {
+      autoDelivery: autoDeliveryEnabled.value,
+      storeEnabled: storeEnabled.value,
+      maintenanceMode: maintenanceMode.value
+    })
+    
   } catch (error) {
-    console.error('Failed to load settings:', error)
+    console.error('❌ Failed to load settings:', error)
     showMessage('error', 'Failed to load settings')
+  } finally {
+    loading.value = false
   }
 }
 
-const toggleAutoApprove = async () => {
-  const newValue = serverConfig.value.auto_approve_users === 'true' ? 'false' : 'true'
+// Auto Delivery Toggle
+const toggleAutoDelivery = async () => {
+  if (loading.value) return
   
-  if (newValue === 'true') {
-    if (!confirm('This will automatically approve all pending users. Continue?')) {
+  try {
+    loading.value = true
+    const newValue = !autoDeliveryEnabled.value
+    
+    console.log('🔄 Toggling auto delivery:', newValue)
+    
+    const response = await $fetch('/api/admin/settings', {
+      method: 'PUT',
+      body: { 
+        type: 'system_settings', 
+        key: 'auto_delivery', 
+        value: newValue.toString() 
+      }
+    })
+    
+    if (response.success) {
+      autoDeliveryEnabled.value = newValue
+      showMessage('success', `Auto delivery ${newValue ? 'enabled' : 'disabled'}`)
+      console.log('✅ Auto delivery toggled:', newValue)
+    }
+  } catch (error) {
+    console.error('❌ Failed to toggle auto delivery:', error)
+    showMessage('error', 'Failed to update auto delivery setting')
+  } finally {
+    loading.value = false
+  }
+}
+
+// Store Enabled Toggle
+const toggleStoreEnabled = async () => {
+  if (loading.value) return
+  
+  try {
+    loading.value = true
+    const newValue = !storeEnabled.value
+    
+    if (!newValue) {
+      if (!confirm('This will disable the store for all users. Continue?')) {
+        loading.value = false
+        return
+      }
+    }
+    
+    const response = await $fetch('/api/admin/settings', {
+      method: 'PUT',
+      body: { 
+        type: 'system_settings', 
+        key: 'store_enabled', 
+        value: newValue.toString() 
+      }
+    })
+    
+    if (response.success) {
+      storeEnabled.value = newValue
+      showMessage('success', `Store ${newValue ? 'enabled' : 'disabled'}`)
+    }
+  } catch (error) {
+    console.error('❌ Failed to toggle store:', error)
+    showMessage('error', 'Failed to update store setting')
+  } finally {
+    loading.value = false
+  }
+}
+
+// Auto Approve Toggle
+const toggleAutoApprove = async () => {
+  if (loading.value) return
+  
+  try {
+    loading.value = true
+    const newValue = !autoApproveEnabled.value
+    
+    if (newValue && !confirm('This will automatically approve all pending users. Continue?')) {
+      loading.value = false
       return
     }
+    
+    const response = await $fetch('/api/admin/settings', {
+      method: 'PUT',
+      body: { 
+        type: 'server_config', 
+        key: 'auto_approve_users', 
+        value: newValue.toString() 
+      }
+    })
+    
+    if (response.success) {
+      autoApproveEnabled.value = newValue
+      showMessage('success', `Auto approve ${newValue ? 'enabled' : 'disabled'}`)
+    }
+  } catch (error) {
+    console.error('❌ Failed to toggle auto approve:', error)
+    showMessage('error', 'Failed to update auto approve setting')
+  } finally {
+    loading.value = false
   }
-  
-  await updateSetting('server_config', 'auto_approve_users', newValue)
 }
 
-const toggleSystemSetting = async (key) => {
-  const category = Object.keys(systemSettings.value).find(cat => 
-    systemSettings.value[cat] && systemSettings.value[cat][key]
-  )
+// Maintenance Mode Toggle
+const toggleMaintenanceMode = async () => {
+  if (loading.value) return
   
-  if (!category) return
-  
-  const currentValue = systemSettings.value[category][key].value
-  const newValue = currentValue === 'true' ? 'false' : 'true'
-  
-  await updateSetting('system_settings', key, newValue)
+  try {
+    loading.value = true
+    const newValue = !maintenanceMode.value
+    
+    if (newValue && !confirm('This will put the site in maintenance mode. Only admins can access. Continue?')) {
+      loading.value = false
+      return
+    }
+    
+    const response = await $fetch('/api/admin/settings', {
+      method: 'PUT',
+      body: { 
+        type: 'system_settings', 
+        key: 'maintenance_mode', 
+        value: newValue.toString() 
+      }
+    })
+    
+    if (response.success) {
+      maintenanceMode.value = newValue
+      showMessage('success', `Maintenance mode ${newValue ? 'enabled' : 'disabled'}`)
+    }
+  } catch (error) {
+    console.error('❌ Failed to toggle maintenance mode:', error)
+    showMessage('error', 'Failed to update maintenance mode')
+  } finally {
+    loading.value = false
+  }
+}
+
+// Update functions for numeric settings
+const updateMaxDeliveryAttempts = async () => {
+  await updateSetting('system_settings', 'max_delivery_attempts', maxDeliveryAttempts.value)
+}
+
+const updatePointExchangeRate = async () => {
+  await updateSetting('system_settings', 'point_exchange_rate', pointExchangeRate.value)
+}
+
+const updateMaxNameChanges = async () => {
+  await updateSetting('server_config', 'max_name_changes_per_month', maxNameChanges.value)
 }
 
 const updateSetting = async (type, key, value) => {
+  if (loading.value) return
+  
   try {
+    loading.value = true
+    
     const response = await $fetch('/api/admin/settings', {
       method: 'PUT',
       body: { type, key, value: String(value) }
     })
     
     if (response.success) {
-      await loadSettings()
       showMessage('success', `Setting "${key}" updated successfully`)
     }
   } catch (error) {
-    console.error('Failed to update setting:', error)
+    console.error('❌ Failed to update setting:', error)
     showMessage('error', `Failed to update setting: ${error.message}`)
+  } finally {
+    loading.value = false
   }
 }
 
