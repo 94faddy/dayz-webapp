@@ -8,6 +8,7 @@ yarn.lock
 # builds / caches
 dist/
 build/
+public/
 .out/
 .nuxt/
 .next/
