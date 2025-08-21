@@ -1,10 +1,32 @@
 // server/api/admin/history/index.js
 import { requireAdminAuth } from '~/server/utils/admin-middleware.js'
-import { hasAdminPermission } from '~/utils/admin-auth.js'
+import { hasAdminPermission, logAdminActivity } from '~/utils/admin-auth.js'
+import { getHeader } from 'h3'
 
 export default defineEventHandler(async (event) => {
   const admin = await requireAdminAuth(event)
+  const method = event.node.req.method
   
+  // Get IP for logging
+  const ip = getHeader(event, 'x-forwarded-for') || 
+             getHeader(event, 'x-real-ip') || 
+             event.node?.req?.connection?.remoteAddress ||
+             '127.0.0.1'
+  
+  switch (method) {
+    case 'GET':
+      return await getHistory(event, admin)
+    case 'DELETE':
+      return await deleteHistoryRecord(event, admin, ip)
+    default:
+      throw createError({
+        statusCode: 405,
+        statusMessage: 'Method not allowed'
+      })
+  }
+})
+
+async function getHistory(event, admin) {
   // Check permission
   if (!await hasAdminPermission(admin.id, 'orders:read')) {
     throw createError({
@@ -22,7 +44,7 @@ export default defineEventHandler(async (event) => {
     // Prepare API query parameters
     const apiQuery = {
       page: query.page || 1,
-      limit: query.limit || 50
+      limit: query.limit || 100
     }
     
     // Add search parameters
@@ -38,12 +60,26 @@ export default defineEventHandler(async (event) => {
       apiQuery.status = query.status
     }
     
+    if (query.source) {
+      apiQuery.source = query.source
+    }
+    
     if (query.startDate) {
       apiQuery.startDate = query.startDate
     }
     
     if (query.endDate) {
       apiQuery.endDate = query.endDate
+    }
+    
+    // Handle player search - could be Steam ID or name
+    if (query.player) {
+      // Check if it's a Steam ID (17 digits starting with 7656119) or player name
+      if (/^7656119[0-9]{10}$/.test(query.player)) {
+        apiQuery.steamId = query.player
+      } else {
+        apiQuery.playerName = query.player
+      }
     }
     
     console.log('🔍 Fetching history from DayZ API:', `${config.dzsvApi}/v1/itemgiver/history`)
@@ -55,7 +91,7 @@ export default defineEventHandler(async (event) => {
         'X-API-Key': config.dzsvApiKey
       },
       query: apiQuery,
-      timeout: 15000 // 15 second timeout
+      timeout: 15000
     })
     
     console.log('✅ DayZ API History Response:', historyResponse)
@@ -64,21 +100,21 @@ export default defineEventHandler(async (event) => {
     if (historyResponse && historyResponse.history && Array.isArray(historyResponse.history)) {
       const transformedHistory = historyResponse.history.map(record => ({
         id: record.id,
-        steamId: record.steam_id,
-        playerName: record.player_name || 'Unknown',
+        steamId: record.steam_id || record.steamId,
+        playerName: record.player_name || record.playerName || 'Unknown',
         item: {
-          classname: record.item_classname,
-          quantity: record.item_quantity || 1,
+          classname: record.item_classname || record.classname,
+          quantity: record.item_quantity || record.quantity || 1,
           attachments: record.attachments || []
         },
         status: record.status,
-        deliveredAt: record.delivered_at,
-        queuedAt: record.created_at,
-        failedAt: record.status === 'failed' ? record.updated_at : null,
+        deliveredAt: record.delivered_at || record.deliveredAt,
+        queuedAt: record.created_at || record.queuedAt,
+        failedAt: record.status === 'failed' ? (record.failed_at || record.updated_at) : null,
         attempts: record.attempts || 1,
         source: record.source || 'api',
-        orderId: record.order_id || 'N/A',
-        error: record.error_message
+        orderId: record.order_id || record.orderId || 'N/A',
+        error: record.error_message || record.error
       }))
       
       console.log(`✅ Transformed ${transformedHistory.length} history records`)
@@ -88,15 +124,15 @@ export default defineEventHandler(async (event) => {
         history: transformedHistory,
         pagination: {
           page: parseInt(query.page) || 1,
-          limit: parseInt(query.limit) || 50,
+          limit: parseInt(query.limit) || 100,
           total: historyResponse.total_records || transformedHistory.length,
-          totalPages: Math.ceil((historyResponse.total_records || transformedHistory.length) / (parseInt(query.limit) || 50))
+          totalPages: Math.ceil((historyResponse.total_records || transformedHistory.length) / (parseInt(query.limit) || 100))
         },
         stats: {
           total: historyResponse.total_records || transformedHistory.length,
-          delivered: historyResponse.filtered_records || transformedHistory.filter(h => h.status === 'delivered').length,
-          pending: transformedHistory.filter(h => h.status === 'pending').length,
-          failed: transformedHistory.filter(h => h.status === 'failed').length
+          delivered: historyResponse.stats?.delivered || transformedHistory.filter(h => h.status === 'delivered').length,
+          pending: historyResponse.stats?.pending || transformedHistory.filter(h => h.status === 'pending').length,
+          failed: historyResponse.stats?.failed || transformedHistory.filter(h => h.status === 'failed').length
         }
       }
     } else {
@@ -112,6 +148,7 @@ export default defineEventHandler(async (event) => {
       console.log('🔄 Falling back to local database...')
       
       const { executeQuery } = await import('~/utils/database.js')
+      const query = getQuery(event)
       
       // Build WHERE conditions for search
       const whereConditions = []
@@ -124,6 +161,15 @@ export default defineEventHandler(async (event) => {
       } else if (query.playerName) {
         whereConditions.push('u.name LIKE ?')
         queryParams.push(`%${query.playerName}%`)
+      } else if (query.player) {
+        // Handle combined player search
+        if (/^7656119[0-9]{10}$/.test(query.player)) {
+          whereConditions.push('u.steamid64 = ?')
+          queryParams.push(query.player)
+        } else {
+          whereConditions.push('u.name LIKE ?')
+          queryParams.push(`%${query.player}%`)
+        }
       }
       
       // Filter by status
@@ -171,7 +217,7 @@ export default defineEventHandler(async (event) => {
         JOIN store_items si ON poi.item_id = si.id
         ${whereClause}
         ORDER BY COALESCE(poi.delivered_at, poi.created_at) DESC
-        LIMIT 50
+        LIMIT 100
       `, queryParams)
       
       // Transform to match frontend format
@@ -199,7 +245,7 @@ export default defineEventHandler(async (event) => {
         history: transformedHistory,
         pagination: {
           page: 1,
-          limit: 50,
+          limit: 100,
           total: transformedHistory.length,
           totalPages: 1
         },
@@ -221,7 +267,7 @@ export default defineEventHandler(async (event) => {
         history: [],
         pagination: {
           page: 1,
-          limit: 50,
+          limit: 100,
           total: 0,
           totalPages: 0
         },
@@ -239,4 +285,83 @@ export default defineEventHandler(async (event) => {
       }
     }
   }
-})
+}
+
+async function deleteHistoryRecord(event, admin, ip) {
+  // Check permission
+  if (!await hasAdminPermission(admin.id, 'orders:write')) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Permission denied'
+    })
+  }
+  
+  const body = await readBody(event)
+  const { recordId } = body
+  
+  if (!recordId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Record ID is required'
+    })
+  }
+  
+  try {
+    console.log(`🔄 Deleting history record: ${recordId}`)
+    
+    // Try to delete from DayZ API first
+    const config = useRuntimeConfig()
+    
+    try {
+      const response = await $fetch(`${config.dzsvApi}/v1/itemgiver/history/${recordId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-API-Key': config.dzsvApiKey
+        },
+        timeout: 10000
+      })
+      
+      console.log('✅ DayZ API Delete Response:', response)
+    } catch (apiError) {
+      console.warn('⚠️ Failed to delete from DayZ API:', apiError.message)
+      
+      // Try to delete from local database as fallback
+      const { executeQuery } = await import('~/utils/database.js')
+      
+      const deleteResult = await executeQuery(
+        'UPDATE purchase_order_items SET delivery_status = "cancelled" WHERE id = ?',
+        [recordId]
+      )
+      
+      if (deleteResult.affectedRows === 0) {
+        throw new Error('Record not found in local database')
+      }
+      
+      console.log('✅ Deleted from local database as fallback')
+    }
+    
+    // Log admin activity
+    await logAdminActivity(
+      admin.id,
+      'delete_history_record',
+      'delivery_history',
+      recordId,
+      `Deleted delivery history record`,
+      null,
+      { recordId },
+      ip
+    )
+    
+    return {
+      success: true,
+      message: 'History record deleted successfully'
+    }
+  } catch (error) {
+    console.error('❌ Delete history record error:', error)
+    
+    throw createError({
+      statusCode: error.status || 500,
+      statusMessage: error.message || 'Failed to delete history record'
+    })
+  }
+}

@@ -97,12 +97,15 @@
             Refresh
           </button>
           
-          <button @click="showHistoryModal" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg">
-            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <NuxtLink 
+            to="/admin/delivery-history"
+            class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg inline-flex items-center"
+          >
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
-            Delivery History
-          </button>
+            View Delivery History
+          </NuxtLink>
         </div>
       </div>
     </div>
@@ -371,168 +374,6 @@
         </div>
       </div>
     </div>
-    
-    <!-- History Modal -->
-    <div v-if="showHistory" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div class="bg-gray-800 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-        <div class="p-6">
-          <div class="flex items-center justify-between mb-6">
-            <h3 class="text-xl font-semibold text-white">Delivery History</h3>
-            <button @click="showHistory = false" class="text-gray-400 hover:text-white">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-          
-          <!-- History Search & Filters -->
-          <div class="mb-6 space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <!-- Player Search -->
-              <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Search Player</label>
-                <input
-                  v-model="historySearch.player"
-                  @input="debounceHistorySearch"
-                  type="text"
-                  placeholder="Steam ID or Player Name..."
-                  class="w-full bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-red-500 focus:outline-none"
-                />
-              </div>
-              
-              <!-- Status Filter -->
-              <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Status</label>
-                <select 
-                  v-model="historySearch.status" 
-                  @change="loadHistory"
-                  class="w-full bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-red-500 focus:outline-none"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="delivered">Delivered</option>
-                  <option value="pending">Pending</option>
-                  <option value="failed">Failed</option>
-                </select>
-              </div>
-              
-              <!-- Date Range -->
-              <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Date Range</label>
-                <select 
-                  v-model="historySearch.dateRange" 
-                  @change="loadHistory"
-                  class="w-full bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-red-500 focus:outline-none"
-                >
-                  <option value="">All Time</option>
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                </select>
-              </div>
-            </div>
-            
-            <!-- Search Results Info -->
-            <div v-if="historySearch.player || historySearch.status || historySearch.dateRange" class="flex items-center justify-between bg-gray-700 rounded-lg p-3">
-              <div class="text-sm text-gray-300">
-                <span v-if="!loadingHistory">
-                  Found {{ history.length }} result(s)
-                  <span v-if="historySearch.player" class="ml-2">
-                    for "<strong class="text-white">{{ historySearch.player }}</strong>"
-                  </span>
-                </span>
-                <span v-else class="flex items-center">
-                  <div class="loader-small mr-2"></div>
-                  Searching...
-                </span>
-              </div>
-              
-              <button 
-                @click="clearHistorySearch" 
-                class="text-gray-400 hover:text-white text-sm"
-              >
-                Clear Filters
-              </button>
-            </div>
-          </div>
-          
-          <!-- History Content -->
-          <div v-if="loadingHistory" class="flex justify-center py-8">
-            <div class="loader mr-4"></div>
-            <span class="text-gray-400">Loading history...</span>
-          </div>
-          
-          <div v-else-if="history.length === 0" class="text-center py-8">
-            <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            <h4 class="text-lg font-medium text-white mb-2">No Records Found</h4>
-            <p class="text-gray-400">
-              <span v-if="historySearch.player || historySearch.status || historySearch.dateRange">
-                No delivery history matches your search criteria.
-              </span>
-              <span v-else>
-                No delivery history available.
-              </span>
-            </p>
-          </div>
-          
-          <div v-else class="overflow-x-auto">
-            <table class="w-full">
-              <thead class="bg-gray-900">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Player</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Item</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Status</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Date</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Order</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-700">
-                <tr v-for="record in history" :key="record.id" class="hover:bg-gray-700">
-                  <td class="px-4 py-3">
-                    <div class="text-sm text-white">{{ record.playerName || 'Unknown' }}</div>
-                    <div class="text-xs text-gray-400 font-mono">{{ record.steamId }}</div>
-                  </td>
-                  <td class="px-4 py-3">
-                    <div class="text-sm text-white">{{ record.item?.classname || 'Unknown Item' }}</div>
-                    <div class="text-xs text-gray-400">Qty: {{ record.item?.quantity || 1 }}</div>
-                    <div v-if="record.item?.attachments && record.item.attachments.length > 0" class="text-xs text-blue-400">
-                      +{{ record.item.attachments.length }} attachments
-                    </div>
-                  </td>
-                  <td class="px-4 py-3">
-                    <span :class="getDeliveryStatusClass(record.status)" class="px-2 py-1 rounded text-xs">
-                      {{ getDeliveryStatusText(record.status) }}
-                    </span>
-                    <div v-if="record.attempts > 1" class="text-xs text-gray-400 mt-1">
-                      {{ record.attempts }} attempts
-                    </div>
-                    <div v-if="record.error" class="text-xs text-red-400 mt-1" :title="record.error">
-                      {{ record.error.length > 30 ? record.error.substring(0, 30) + '...' : record.error }}
-                    </div>
-                  </td>
-                  <td class="px-4 py-3 text-sm text-gray-400">
-                    <div v-if="record.deliveredAt">
-                      {{ formatDate(record.deliveredAt, 'short') }}
-                    </div>
-                    <div v-else-if="record.failedAt">
-                      {{ formatDate(record.failedAt, 'short') }}
-                    </div>
-                    <div v-else>
-                      {{ formatDate(record.queuedAt, 'short') }}
-                    </div>
-                  </td>
-                  <td class="px-4 py-3 text-sm text-gray-400">
-                    {{ record.orderId || 'N/A' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -546,41 +387,23 @@ definePageMeta({
 
 // State
 const loading = ref(true)
-const loadingHistory = ref(false)
 const orders = ref([])
 const stats = ref(null)
 const selectedOrder = ref(null)
-const showHistory = ref(false)
-const history = ref([])
 
 // Filters
 const selectedStatus = ref('')
 const searchUser = ref('')
 const filteredOrders = ref([])
 
-// History Search
-const historySearch = ref({
-  player: '',
-  status: '',
-  dateRange: ''
-})
-
 // Search debounce
 let searchTimeout = null
-let historySearchTimeout = null
 
 const debounceSearch = () => {
   clearTimeout(searchTimeout)
   searchTimeout = setTimeout(() => {
     filterOrders()
   }, 300)
-}
-
-const debounceHistorySearch = () => {
-  clearTimeout(historySearchTimeout)
-  historySearchTimeout = setTimeout(() => {
-    loadHistory()
-  }, 500)
 }
 
 // Methods
@@ -880,80 +703,6 @@ const cancelOrder = async (order) => {
       })
     }
   }
-}
-
-const showHistoryModal = async () => {
-  showHistory.value = true
-  await loadHistory()
-}
-
-const loadHistory = async () => {
-  try {
-    loadingHistory.value = true
-    
-    // Prepare query parameters
-    const queryParams = {}
-    
-    // Add search filters
-    if (historySearch.value.player) {
-      // Check if it's a Steam ID (17 digits starting with 7656119) or player name
-      if (/^7656119[0-9]{10}$/.test(historySearch.value.player)) {
-        queryParams.steamId = historySearch.value.player
-      } else {
-        queryParams.playerName = historySearch.value.player
-      }
-    }
-    
-    if (historySearch.value.status) {
-      queryParams.status = historySearch.value.status
-    }
-    
-    if (historySearch.value.dateRange) {
-      const now = new Date()
-      let startDate = null
-      
-      switch (historySearch.value.dateRange) {
-        case 'today':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-          break
-        case 'week':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-          break
-        case 'month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-          break
-      }
-      
-      if (startDate) {
-        queryParams.startDate = startDate.toISOString()
-      }
-    }
-    
-    console.log('🔍 Loading history with params:', queryParams)
-    
-    const response = await $fetch('/api/admin/history', {
-      query: queryParams
-    })
-    
-    if (response.success) {
-      history.value = response.history || []
-      console.log(`✅ Loaded ${history.value.length} history records`)
-    }
-  } catch (error) {
-    console.error('Failed to load history:', error)
-    history.value = []
-  } finally {
-    loadingHistory.value = false
-  }
-}
-
-const clearHistorySearch = () => {
-  historySearch.value = {
-    player: '',
-    status: '',
-    dateRange: ''
-  }
-  loadHistory()
 }
 
 // Watchers
