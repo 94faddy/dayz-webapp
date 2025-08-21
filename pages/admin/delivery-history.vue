@@ -209,6 +209,12 @@
                 <div v-if="record.item?.attachments && record.item.attachments.length > 0" class="text-xs text-blue-400">
                   +{{ record.item.attachments.length }} attachments
                 </div>
+                <button 
+                  @click="viewItemDetails(record)"
+                  class="text-xs text-purple-400 hover:text-purple-300 mt-1"
+                >
+                  View JSON
+                </button>
               </td>
               
               <!-- Status -->
@@ -361,6 +367,16 @@
                 
                 <div class="flex space-x-2">
                   <button
+                    @click="viewQueueItemJson(item, index)"
+                    class="text-purple-400 hover:text-purple-300"
+                    title="View JSON"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                    </svg>
+                  </button>
+                  
+                  <button
                     @click="editQueueItem(index, item)"
                     class="text-blue-400 hover:text-blue-300"
                     title="Edit Item"
@@ -411,9 +427,9 @@
       </div>
     </div>
     
-    <!-- Add/Edit Item Modal -->
+    <!-- Enhanced Add/Edit Item Modal -->
     <div v-if="showItemModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="bg-gray-800 rounded-lg max-w-5xl w-full max-h-[95vh] overflow-y-auto">
         <div class="p-6">
           <div class="flex items-center justify-between mb-6">
             <h3 class="text-xl font-semibold text-white">
@@ -442,7 +458,7 @@
                 />
               </div>
               
-              <!-- Classname with Search -->
+              <!-- Classname with Enhanced Search -->
               <div :class="editingItemIndex !== null ? 'md:col-span-1' : 'md:col-span-1'">
                 <label class="block text-sm font-medium text-gray-300 mb-2">Main Classname *</label>
                 <div class="relative">
@@ -485,7 +501,7 @@
               </div>
             </div>
             
-            <!-- Attachments Section -->
+            <!-- Enhanced Attachments Section -->
             <div>
               <div class="flex items-center justify-between mb-4">
                 <label class="text-sm font-medium text-gray-300">
@@ -532,7 +548,7 @@
                 </div>
               </div>
               
-              <!-- Visual Attachments Editor -->
+              <!-- Enhanced Visual Attachments Editor -->
               <div v-else>
                 <div v-if="itemForm.attachments.length > 0" class="space-y-4">
                   <div v-for="(attachment, index) in itemForm.attachments" 
@@ -689,6 +705,42 @@
         </div>
       </div>
     </div>
+    
+    <!-- JSON Viewer Modal -->
+    <div v-if="showJsonModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-semibold text-white">
+              {{ jsonModalTitle }}
+            </h3>
+            <button @click="showJsonModal = false" class="text-gray-400 hover:text-white">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          
+          <!-- JSON Content -->
+          <div class="bg-gray-900 rounded-lg p-4">
+            <pre class="text-green-400 text-sm font-mono whitespace-pre-wrap">{{ jsonContent }}</pre>
+          </div>
+          
+          <!-- Copy Button -->
+          <div class="flex justify-end mt-4">
+            <button 
+              @click="copyJsonToClipboard"
+              class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+            >
+              <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+              Copy to Clipboard
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -726,7 +778,12 @@ const savingItem = ref(false)
 const showJsonEditor = ref(false)
 const jsonError = ref('')
 
-// Classname Search States
+// JSON Viewer Modal
+const showJsonModal = ref(false)
+const jsonModalTitle = ref('')
+const jsonContent = ref('')
+
+// Enhanced Classname Search States
 const mainClassnameResults = ref([])
 const showMainClassnameDropdown = ref(false)
 const attachmentResults = ref({})
@@ -894,6 +951,37 @@ const viewPlayerQueue = async (steamId) => {
   }
 }
 
+// Enhanced JSON Viewer Functions
+const viewItemDetails = (record) => {
+  jsonModalTitle.value = `Item Details: ${record.item?.classname || 'Unknown'}`
+  jsonContent.value = JSON.stringify(record.item, null, 2)
+  showJsonModal.value = true
+}
+
+const viewQueueItemJson = (item, index) => {
+  jsonModalTitle.value = `Queue Item ${index + 1}: ${item.classname}`
+  jsonContent.value = JSON.stringify(item, null, 2)
+  showJsonModal.value = true
+}
+
+const copyJsonToClipboard = async () => {
+  try {
+    await navigator.clipboard.writeText(jsonContent.value)
+    await Swal.fire({
+      title: 'Copied!',
+      text: 'JSON content copied to clipboard',
+      icon: 'success',
+      background: '#1f2937',
+      color: '#fff',
+      confirmButtonColor: '#dc2626',
+      timer: 2000,
+      showConfirmButton: false
+    })
+  } catch (error) {
+    console.error('Failed to copy to clipboard:', error)
+  }
+}
+
 const addItemToQueue = () => {
   if (!selectedPlayer.value) return
   
@@ -943,7 +1031,7 @@ const closeItemModal = () => {
   }
 }
 
-// Main classname search
+// Enhanced Classname Search Functions
 const searchMainClassname = async () => {
   clearTimeout(mainClassnameTimeout)
   
@@ -1059,7 +1147,7 @@ const hideNestedDropdown = () => {
   }, 200)
 }
 
-// Attachment management
+// Enhanced Attachment management
 const addAttachment = () => {
   itemForm.value.attachments.push({
     classname: '',
@@ -1095,7 +1183,7 @@ const removeNestedAttachment = (parentIndex, nestedIndex) => {
   syncAttachmentsToJson()
 }
 
-// JSON Editor functions
+// Enhanced JSON Editor functions
 const toggleJsonView = () => {
   if (showJsonEditor.value) {
     // Switching from JSON to visual editor
@@ -1186,11 +1274,27 @@ const saveItem = async () => {
     }
     
     // Parse attachments if provided
-    if (itemForm.value.attachmentsJson.trim()) {
+    if (showJsonEditor.value && itemForm.value.attachmentsJson.trim()) {
       try {
         itemData.attachments = JSON.parse(itemForm.value.attachmentsJson)
       } catch (e) {
         throw new Error('Invalid JSON format for attachments')
+      }
+    } else if (!showJsonEditor.value && itemForm.value.attachments.length > 0) {
+      // Use visual editor data
+      const validAttachments = itemForm.value.attachments
+        .filter(a => a.classname)
+        .map(a => ({
+          classname: a.classname,
+          quantity: a.quantity || 1,
+          attachments: a.attachments ? a.attachments.filter(n => n.classname).map(n => ({
+            classname: n.classname,
+            quantity: n.quantity || 1
+          })) : []
+        }))
+      
+      if (validAttachments.length > 0) {
+        itemData.attachments = validAttachments
       }
     }
     
@@ -1373,14 +1477,20 @@ const showAddItemModal = () => {
     steamId: '',
     classname: '',
     quantity: 1,
+    attachments: [],
     attachmentsJson: ''
   }
   editingItemIndex.value = null
   showItemModal.value = true
+  showJsonEditor.value = false
 }
 
 const viewDetails = (record) => {
   // Show detailed view of the record
+  const attachmentsInfo = record.item?.attachments && record.item.attachments.length > 0 
+    ? `<div><strong>Attachments:</strong> ${record.item.attachments.length} items</div>`
+    : ''
+  
   Swal.fire({
     title: 'Delivery Details',
     html: `
@@ -1390,6 +1500,7 @@ const viewDetails = (record) => {
         <div><strong>Status:</strong> ${getDeliveryStatusText(record.status)}</div>
         <div><strong>Source:</strong> ${getSourceText(record.source)}</div>
         <div><strong>Attempts:</strong> ${record.attempts}</div>
+        ${attachmentsInfo}
         ${record.error ? `<div><strong>Error:</strong> ${record.error}</div>` : ''}
         ${record.orderId && record.orderId !== 'N/A' ? `<div><strong>Order ID:</strong> ${record.orderId}</div>` : ''}
       </div>

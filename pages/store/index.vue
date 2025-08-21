@@ -34,6 +34,11 @@
           </div>
         </div>
         
+        <!-- Exchange Rate Display -->
+        <div v-if="exchangeRate" class="mt-4 text-sm text-gray-400">
+          <span>Exchange Rate: 1 THB = {{ exchangeRate }} Points</span>
+        </div>
+        
         <!-- Login Required Message -->
         <div v-else class="mt-6 p-4 bg-yellow-900/20 border border-yellow-700/30 rounded-lg max-w-md mx-auto">
           <div class="flex items-center space-x-3">
@@ -365,6 +370,7 @@ const storeItems = ref([])
 const categories = ref([])
 const autoDeliveryStatus = ref(null)
 const selectedItem = ref(null)
+const exchangeRate = ref(100) // Default exchange rate
 
 // Computed
 const filteredItems = computed(() => {
@@ -418,18 +424,31 @@ const showItemDetails = (item) => {
   selectedItem.value = item
 }
 
-// Load auto delivery status
-const loadAutoDeliveryStatus = async () => {
-  if (!user.value) return
-  
+// Load store settings including exchange rate
+const loadStoreSettings = async () => {
   try {
     const response = await $fetch('/api/store/settings')
     autoDeliveryStatus.value = response.autoDeliveryEnabled || false
-    console.log('🔍 Auto delivery status:', autoDeliveryStatus.value)
+    exchangeRate.value = response.exchangeRate || 100
+    console.log('🔍 Store settings loaded:', {
+      autoDelivery: autoDeliveryStatus.value,
+      exchangeRate: exchangeRate.value
+    })
   } catch (error) {
-    console.error('Failed to load auto delivery status:', error)
+    console.error('Failed to load store settings:', error)
     autoDeliveryStatus.value = false
+    exchangeRate.value = 100 // fallback
   }
+}
+
+// Calculate points from THB
+const calculatePoints = (thb) => {
+  return Math.floor(thb * exchangeRate.value)
+}
+
+// Calculate THB from points
+const calculateTHB = (points) => {
+  return Math.ceil(points / exchangeRate.value)
 }
 
 // Load store items from database
@@ -626,37 +645,87 @@ const purchaseItem = async (item) => {
 }
 
 const showTopUpModal = async () => {
-  const { value: amount } = await Swal.fire({
+  const { value: result } = await Swal.fire({
     title: 'Top Up Points',
     html: `
-      <div class="text-left space-y-4">
-        <p class="text-gray-300">Select the amount you want to top up:</p>
-        <div class="grid grid-cols-2 gap-2">
-          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white transition-all" data-amount="1000">
-            <div class="text-lg font-bold">1,000</div>
-            <div class="text-xs text-gray-400">Points</div>
-            <div class="text-sm mt-1">฿50</div>
-          </button>
-          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white transition-all" data-amount="2500">
-            <div class="text-lg font-bold">2,500</div>
-            <div class="text-xs text-gray-400">Points</div>
-            <div class="text-sm mt-1">฿100</div>
-          </button>
-          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white transition-all" data-amount="5000">
-            <div class="text-lg font-bold">5,000</div>
-            <div class="text-xs text-gray-400">Points</div>
-            <div class="text-sm mt-1">฿200</div>
-          </button>
-          <button class="topup-option bg-gray-700 hover:bg-gray-600 p-3 rounded text-white transition-all" data-amount="10000">
-            <div class="text-lg font-bold">10,000</div>
-            <div class="text-xs text-gray-400">Points</div>
-            <div class="text-sm mt-1 text-green-400">฿350</div>
-            <div class="text-xs text-green-400">Save ฿50!</div>
-          </button>
+      <div class="text-left space-y-6">
+        <!-- Exchange Rate Info -->
+        <div class="bg-blue-900/30 border border-blue-700/50 rounded-lg p-4">
+          <div class="flex items-center space-x-2 mb-2">
+            <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+            </svg>
+            <span class="font-medium text-blue-300">Exchange Rate</span>
+          </div>
+          <p class="text-sm text-blue-200">1 THB = ${exchangeRate.value} Points</p>
         </div>
-        <div class="mt-4 p-3 bg-gray-700 rounded">
-          <p class="text-sm text-gray-300">Selected: <span id="selected-amount" class="font-bold text-yellow-400">None</span></p>
-          <p class="text-xs text-gray-400 mt-1">Payment methods: TrueMoney Wallet, PromptPay, Bank Transfer</p>
+
+        <!-- Quick Amount Buttons -->
+        <div>
+          <p class="text-gray-300 mb-3">Quick Select:</p>
+          <div class="grid grid-cols-2 gap-3">
+            <button class="topup-option bg-gray-700 hover:bg-gray-600 p-4 rounded-lg text-white transition-all" data-amount="50">
+              <div class="text-lg font-bold">฿50</div>
+              <div class="text-sm text-yellow-400">${formatNumber(calculatePoints(50))} Points</div>
+            </button>
+            <button class="topup-option bg-gray-700 hover:bg-gray-600 p-4 rounded-lg text-white transition-all" data-amount="100">
+              <div class="text-lg font-bold">฿100</div>
+              <div class="text-sm text-yellow-400">${formatNumber(calculatePoints(100))} Points</div>
+            </button>
+            <button class="topup-option bg-gray-700 hover:bg-gray-600 p-4 rounded-lg text-white transition-all" data-amount="200">
+              <div class="text-lg font-bold">฿200</div>
+              <div class="text-sm text-yellow-400">${formatNumber(calculatePoints(200))} Points</div>
+            </button>
+            <button class="topup-option bg-gray-700 hover:bg-gray-600 p-4 rounded-lg text-white transition-all" data-amount="500">
+              <div class="text-lg font-bold">฿500</div>
+              <div class="text-sm text-yellow-400">${formatNumber(calculatePoints(500))} Points</div>
+              <div class="text-xs text-green-400">Bonus +5%!</div>
+            </button>
+            <button class="topup-option bg-gray-700 hover:bg-gray-600 p-4 rounded-lg text-white transition-all" data-amount="1000">
+              <div class="text-lg font-bold">฿1,000</div>
+              <div class="text-sm text-yellow-400">${formatNumber(calculatePoints(1000))} Points</div>
+              <div class="text-xs text-green-400">Bonus +10%!</div>
+            </button>
+            <button class="topup-option bg-gray-700 hover:bg-gray-600 p-4 rounded-lg text-white transition-all" data-amount="2000">
+              <div class="text-lg font-bold">฿2,000</div>
+              <div class="text-sm text-yellow-400">${formatNumber(calculatePoints(2000))} Points</div>
+              <div class="text-xs text-green-400">Bonus +15%!</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Custom Amount Input -->
+        <div>
+          <label class="block text-gray-300 mb-2">Or enter custom amount:</label>
+          <div class="space-y-3">
+            <div class="flex items-center space-x-2">
+              <span class="text-gray-400">฿</span>
+              <input 
+                type="number" 
+                id="custom-amount" 
+                min="1" 
+                max="100000"
+                placeholder="Enter amount in THB" 
+                class="flex-1 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+            <div id="custom-points" class="text-sm text-gray-400 min-h-[20px]"></div>
+          </div>
+        </div>
+
+        <!-- Selected Amount Display -->
+        <div class="bg-gray-700 rounded-lg p-4">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-gray-300">Selected Amount:</span>
+            <span id="selected-amount" class="font-bold text-yellow-400">None</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-gray-300">You'll receive:</span>
+            <span id="selected-points" class="font-bold text-green-400">0 Points</span>
+          </div>
+          <div class="text-xs text-gray-400 mt-2">
+            Payment methods: TrueMoney Wallet, PromptPay, Bank Transfer, Credit Card
+          </div>
         </div>
       </div>
     `,
@@ -667,57 +736,154 @@ const showTopUpModal = async () => {
     cancelButtonText: 'Cancel',
     confirmButtonColor: '#dc2626',
     cancelButtonColor: '#6b7280',
+    customClass: {
+      container: 'topup-modal',
+      popup: 'topup-popup'
+    },
     preConfirm: () => {
-      const selected = document.querySelector('.topup-option.selected')
-      return selected ? selected.dataset.amount : null
+      const customInput = document.getElementById('custom-amount')
+      const selectedButton = document.querySelector('.topup-option.selected')
+      
+      let amount = null
+      let isCustom = false
+      
+      if (customInput.value && parseFloat(customInput.value) > 0) {
+        amount = parseFloat(customInput.value)
+        isCustom = true
+      } else if (selectedButton) {
+        amount = parseFloat(selectedButton.dataset.amount)
+        isCustom = false
+      }
+      
+      if (!amount || amount < 1) {
+        Swal.showValidationMessage('Please select or enter a valid amount')
+        return false
+      }
+      
+      if (amount > 100000) {
+        Swal.showValidationMessage('Maximum amount is ฿100,000')
+        return false
+      }
+      
+      return { amount, isCustom }
     },
     didOpen: () => {
+      // Handle quick select buttons
       document.querySelectorAll('.topup-option').forEach(btn => {
         btn.addEventListener('click', (e) => {
+          // Clear custom input
+          document.getElementById('custom-amount').value = ''
+          document.getElementById('custom-points').textContent = ''
+          
+          // Update button selection
           document.querySelectorAll('.topup-option').forEach(b => {
             b.classList.remove('selected', 'bg-red-600', 'ring-2', 'ring-red-400')
           })
           btn.classList.add('selected', 'bg-red-600', 'ring-2', 'ring-red-400')
-          document.getElementById('selected-amount').textContent = btn.dataset.amount + ' Points'
+          
+          // Update display
+          const amount = parseFloat(btn.dataset.amount)
+          let points = calculatePoints(amount)
+          
+          // Apply bonuses
+          if (amount >= 2000) points = Math.floor(points * 1.15)
+          else if (amount >= 1000) points = Math.floor(points * 1.10)
+          else if (amount >= 500) points = Math.floor(points * 1.05)
+          
+          document.getElementById('selected-amount').textContent = `฿${formatNumber(amount)}`
+          document.getElementById('selected-points').textContent = `${formatNumber(points)} Points`
         })
+      })
+      
+      // Handle custom input
+      const customInput = document.getElementById('custom-amount')
+      const customPoints = document.getElementById('custom-points')
+      
+      customInput.addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value)
+        
+        // Clear button selection
+        document.querySelectorAll('.topup-option').forEach(b => {
+          b.classList.remove('selected', 'bg-red-600', 'ring-2', 'ring-red-400')
+        })
+        
+        if (value && value > 0) {
+          const points = calculatePoints(value)
+          customPoints.textContent = `= ${formatNumber(points)} Points`
+          
+          // Update selected display
+          document.getElementById('selected-amount').textContent = `฿${formatNumber(value)}`
+          document.getElementById('selected-points').textContent = `${formatNumber(points)} Points`
+        } else {
+          customPoints.textContent = ''
+          document.getElementById('selected-amount').textContent = 'None'
+          document.getElementById('selected-points').textContent = '0 Points'
+        }
       })
     }
   })
   
-  if (amount) {
+  if (result) {
+    let finalAmount = result.amount
+    let finalPoints = calculatePoints(finalAmount)
+    
+    // Apply bonuses for larger amounts
+    if (!result.isCustom) {
+      if (finalAmount >= 2000) finalPoints = Math.floor(finalPoints * 1.15)
+      else if (finalAmount >= 1000) finalPoints = Math.floor(finalPoints * 1.10)
+      else if (finalAmount >= 500) finalPoints = Math.floor(finalPoints * 1.05)
+    }
+    
     await Swal.fire({
       title: 'Payment Integration',
       html: `
-        <div class="text-left">
-          <p class="mb-4">Amount: <strong>${formatNumber(amount)} Points</strong></p>
-          <p class="text-sm text-gray-400">Payment gateway integration will be implemented here.</p>
-          <p class="text-sm text-gray-400 mt-2">Available payment methods:</p>
-          <ul class="text-sm text-gray-400 mt-1 ml-4">
-            <li>• TrueMoney Wallet</li>
-            <li>• PromptPay QR Code</li>
-            <li>• Bank Transfer</li>
-            <li>• Credit/Debit Card</li>
-          </ul>
+        <div class="text-left space-y-4">
+          <div class="bg-gray-700 rounded-lg p-4">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-gray-300">Amount:</span>
+              <span class="font-bold text-white">฿${formatNumber(finalAmount)}</span>
+            </div>
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-gray-300">Points:</span>
+              <span class="font-bold text-yellow-400">${formatNumber(finalPoints)} Points</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-300">Rate:</span>
+              <span class="text-sm text-gray-400">1 THB = ${exchangeRate.value} Points</span>
+            </div>
+          </div>
+          
+          <div class="text-sm text-gray-400">
+            <p class="mb-2">Payment gateway integration will be implemented here.</p>
+            <p class="font-medium mb-2">Available payment methods:</p>
+            <ul class="ml-4 space-y-1">
+              <li>• TrueMoney Wallet</li>
+              <li>• PromptPay QR Code</li>
+              <li>• Bank Transfer</li>
+              <li>• Credit/Debit Card</li>
+            </ul>
+          </div>
         </div>
       `,
       icon: 'info',
       background: '#1f2937',
       color: '#fff',
-      confirmButtonColor: '#dc2626'
+      confirmButtonColor: '#dc2626',
+      confirmButtonText: 'Proceed to Payment'
     })
   }
 }
 
-// Load store items and auto delivery status on mount
+// Load store items and settings on mount
 onMounted(async () => {
   await loadStoreItems()
-  await loadAutoDeliveryStatus()
+  await loadStoreSettings()
 })
 
-// Watch user changes to reload auto delivery status
+// Watch user changes to reload settings
 watch(user, async (newUser) => {
   if (newUser) {
-    await loadAutoDeliveryStatus()
+    await loadStoreSettings()
   } else {
     autoDeliveryStatus.value = null
   }
@@ -774,5 +940,11 @@ watch(user, async (newUser) => {
 
 .dayz-button-primary:hover {
   background: linear-gradient(to right, #ef4444, #dc2626);
+}
+
+/* Custom modal styles */
+:global(.topup-modal .topup-popup) {
+  max-width: 600px !important;
+  width: 95% !important;
 }
 </style>

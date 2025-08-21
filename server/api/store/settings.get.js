@@ -4,7 +4,7 @@ import { executeQuery } from '~/utils/database.js'
 export default defineEventHandler(async (event) => {
   try {
     // This endpoint is public (no authentication required)
-    // Users need to know about auto delivery status before making purchases
+    // Users need to know about auto delivery status and exchange rate before making purchases
     
     // Get auto delivery setting
     const [autoDeliverySetting] = await executeQuery(
@@ -21,15 +21,31 @@ export default defineEventHandler(async (event) => {
       "SELECT setting_value FROM system_settings WHERE setting_key = 'maintenance_mode'"
     )
     
+    // Get point exchange rate setting
+    const [exchangeRateSetting] = await executeQuery(
+      "SELECT setting_value FROM system_settings WHERE setting_key = 'point_exchange_rate'"
+    )
+    
+    const exchangeRate = parseInt(exchangeRateSetting?.setting_value) || 100 // Default 100 points per 1 THB
+    
+    console.log('🔍 Store settings loaded:', {
+      autoDelivery: autoDeliverySetting?.setting_value === 'true',
+      storeEnabled: storeEnabledSetting?.setting_value !== 'false',
+      maintenance: maintenanceSetting?.setting_value === 'true',
+      exchangeRate: exchangeRate
+    })
+    
     return {
       success: true,
       autoDeliveryEnabled: autoDeliverySetting?.setting_value === 'true',
       storeEnabled: storeEnabledSetting?.setting_value !== 'false', // default true
       maintenanceMode: maintenanceSetting?.setting_value === 'true',
+      exchangeRate: exchangeRate,
       settings: {
         autoDelivery: autoDeliverySetting?.setting_value === 'true',
         storeEnabled: storeEnabledSetting?.setting_value !== 'false',
-        maintenance: maintenanceSetting?.setting_value === 'true'
+        maintenance: maintenanceSetting?.setting_value === 'true',
+        exchangeRate: exchangeRate
       }
     }
     
@@ -42,10 +58,12 @@ export default defineEventHandler(async (event) => {
       autoDeliveryEnabled: false,
       storeEnabled: true,
       maintenanceMode: false,
+      exchangeRate: 100, // Default exchange rate
       settings: {
         autoDelivery: false,
         storeEnabled: true,
-        maintenance: false
+        maintenance: false,
+        exchangeRate: 100
       },
       error: 'Database error'
     }
