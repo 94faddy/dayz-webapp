@@ -35,24 +35,6 @@
         </div>
       </div>
 
-      <!-- Stats Summary -->
-      <!--<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="dayz-card p-6 text-center">
-          <div class="text-3xl font-bold text-white mb-2">{{ formatNumber(totalPlayers) }}</div>
-          <div class="text-gray-400">Total Players</div>
-        </div>
-        
-        <div class="dayz-card p-6 text-center">
-          <div class="text-3xl font-bold text-yellow-500 mb-2">{{ topScore }}</div>
-          <div class="text-gray-400">Top Score</div>
-        </div>
-        
-        <div class="dayz-card p-6 text-center">
-          <div class="text-3xl font-bold text-green-400 mb-2">{{ topPlayer }}</div>
-          <div class="text-gray-400">Current Leader</div>
-        </div>
-      </div>-->
-
       <!-- Filter and Sort Options -->
       <div class="dayz-card p-6 mb-8">
         <div class="flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">

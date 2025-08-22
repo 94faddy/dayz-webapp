@@ -2,33 +2,61 @@
   <div>
     <!-- Hero Section -->
     <section class="relative h-screen flex items-center justify-center overflow-hidden">
-      <!-- Background Gradient แทนรูปภาพ -->
+      <!-- Video Background พร้อม Fallback -->
       <div class="absolute inset-0 z-0">
-        <div class="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-gray-900"></div>
+        <!-- Fallback background -->
         <div class="w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-red-900"></div>
+        
+        <!-- Video overlay (ถ้ามีไฟล์) -->
+        <video 
+          v-if="videoExists"
+          ref="backgroundVideo"
+          autoplay 
+          muted 
+          loop 
+          playsinline
+          class="absolute inset-0 w-full h-full object-cover"
+          @loadstart="onVideoLoadStart"
+          @canplay="onVideoCanPlay"
+          @error="onVideoError"
+        >
+          <!-- ใช้ไฟล์ local จาก public folder -->
+          <source src="/videos/dayzbgs.mp4" type="video/mp4">
+        </video>
+        
+        <!-- Overlay -->
+        <div class="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-gray-900/80"></div>
+      </div>
+      
+      <!-- Loading indicator (ขณะโหลด video) -->
+      <div v-if="videoLoading" class="absolute inset-0 z-5 flex items-center justify-center">
+        <div class="text-white text-center">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+          <p class="text-sm opacity-75">Loading background...</p>
+        </div>
       </div>
       
       <!-- Hero Content -->
       <div class="relative z-10 text-center max-w-4xl mx-auto px-4">
         <h1 class="text-5xl md:text-7xl font-bold text-white mb-6 slide-up">
-          SURVIVE THE
-          <span class="text-red-500">APOCALYPSE</span>
+          ยินดีต้อนรับสู่
+          <span class="text-red-500">NIGHTRO</span>
         </h1>
         <p class="text-xl md:text-2xl text-gray-300 mb-8 slide-up" style="animation-delay: 0.2s">
-          Experience the ultimate survival challenge in DayZ
+          สัมผัสประสบการณ์การเอาชีวิตรอดขั้นสุดยอดใน DayZ
         </p>
         <div class="flex flex-col sm:flex-row gap-4 justify-center slide-up" style="animation-delay: 0.4s">
           <NuxtLink 
             to="/download" 
             class="dayz-button-primary text-lg px-8 py-4 hover:scale-105 transform transition-all duration-200"
           >
-            Download Game
+            DOWNLOAD
           </NuxtLink>
           <NuxtLink 
             to="/store" 
             class="dayz-button-secondary text-lg px-8 py-4 hover:scale-105 transform transition-all duration-200"
           >
-            Visit Store
+            STORE
           </NuxtLink>
         </div>
       </div>
@@ -288,10 +316,15 @@ definePageMeta({
   layout: 'default'
 })
 
-// State
+// State management
 const user = useState('auth.user')
 const loading = ref(false)
 const nextUpdateIn = ref(60)
+
+// Video background state
+const videoExists = ref(true)  // เริ่มต้นเป็น true เพื่อพยายามโหลด video
+const videoLoading = ref(true)
+const backgroundVideo = ref(null)
 
 // Server status reactive data
 const serverStatus = reactive({
@@ -307,6 +340,24 @@ const serverStatus = reactive({
   fps: 0,
   players: { current: 0, max: 60 }
 })
+
+// Video event handlers
+const onVideoLoadStart = () => {
+  console.log('📹 Video loading started...')
+  videoLoading.value = true
+}
+
+const onVideoCanPlay = () => {
+  console.log('✅ Video can play')
+  videoLoading.value = false
+  videoExists.value = true
+}
+
+const onVideoError = (error) => {
+  console.log('❌ Video failed to load:', error)
+  videoExists.value = false
+  videoLoading.value = false
+}
 
 // Function to fetch server status
 const fetchServerStatus = async () => {
@@ -358,8 +409,13 @@ const startCountdown = () => {
   })
 }
 
-// Fetch server status on mount
+// Check video availability and fetch server status on mount
 onMounted(async () => {
+  // ลบการตรวจสอบ video URL (เพราะ CORS block)
+  // แทนที่จะให้ video element จัดการเอง
+  console.log('🎬 Attempting to load video...')
+  
+  // Fetch server status
   await fetchServerStatus()
   startCountdown()
 })
@@ -380,5 +436,34 @@ onMounted(async () => {
 .slide-up {
   animation: slideUp 0.8s ease-out forwards;
   opacity: 0;
+}
+
+/* Video smooth transitions */
+video {
+  transition: opacity 0.5s ease-in-out;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Fallback gradient animation */
+.bg-gradient-to-br {
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
