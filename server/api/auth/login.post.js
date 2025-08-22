@@ -24,23 +24,75 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    // Login user
-    const result = await loginUser(email, password, ip, macAddress)
+    let loginResult
+    
+    try {
+      // Login user - ใช้ try-catch เพื่อจัดการ error จาก loginUser
+      loginResult = await loginUser(email, password, ip, macAddress)
+    } catch (loginError) {
+      console.error('🔐 Login error for:', email, '-', loginError.message)
+      
+      // ✅ ตรวจสอบ error messages เพื่อส่ง response ที่เหมาะสม
+      if (loginError.message.includes('Invalid email or password')) {
+        throw createError({
+          statusCode: 401,
+          statusMessage: 'Invalid email or password'
+        })
+      }
+      
+      // อื่นๆ
+      throw createError({
+        statusCode: 401,
+        statusMessage: loginError.message || 'Login failed'
+      })
+    }
+    
+    // ✅ ตรวจสอบผลลัพธ์จาก loginUser
+    if (!loginResult || !loginResult.status) {
+      console.error('❌ Invalid login result structure')
+      throw createError({
+        statusCode: 500,
+        statusMessage: 'Login processing error'
+      })
+    }
+    
+    // ✅ จัดการกรณี banned user - กลับไปใช้ createError เพื่อให้ Frontend catch ได้
+    if (loginResult.status === 'banned') {
+      console.log('🚫 User access restricted:', email, '-', loginResult.banReason)
+      throw createError({
+        statusCode: 403,
+        statusMessage: loginResult.message,
+        data: {
+          status: 'banned',
+          banReason: loginResult.banReason,
+          user: loginResult.user
+        }
+      })
+    }
     
     // จัดการกรณีรออนุมัติ
-    if (result.status === 'pending_approval') {
+    if (loginResult.status === 'pending_approval') {
+      console.log('⏳ User pending approval:', email)
       return {
         success: false,
         status: 'pending_approval',
-        message: result.message,
-        user: result.user
+        message: loginResult.message,
+        user: loginResult.user
       }
     }
     
-    // Login สำเร็จ
-    const user = result.user
+    // ✅ Login สำเร็จ - ตรวจสอบว่ามี user object ครบถ้วน
+    const user = loginResult.user
     
-    // สร้าง session - ห้ามข้าม error
+    if (!user || !user.id) {
+      console.error('❌ Missing user data in login result')
+      throw createError({
+        statusCode: 500,
+        statusMessage: 'User data processing error'
+      })
+    }
+    
+    // สร้าง session - เฉพาะเมื่อ login สำเร็จและมี user data ครบถ้วน
     try {
       const sessionConfig = {
         maxAge: 24 * 60 * 60, // 24 hours
@@ -60,7 +112,7 @@ export default defineEventHandler(async (event) => {
           email: user.email,
           name: user.name,
           steamid64: user.steamid64,
-          points: user.points
+          points: user.points || 0
         },
         isAdmin: false,
         loginTime: new Date().toISOString(),
@@ -104,7 +156,7 @@ export default defineEventHandler(async (event) => {
         email: user.email,
         name: user.name,
         steamid64: user.steamid64,
-        points: user.points
+        points: user.points || 0
       }
     }
     
@@ -113,10 +165,10 @@ export default defineEventHandler(async (event) => {
       throw error
     }
     
-    console.error('Login error:', error)
+    console.error('❌ Login system error:', error)
     throw createError({
-      statusCode: 401,
-      statusMessage: error.message || 'Login failed'
+      statusCode: 500,
+      statusMessage: error.message || 'Login system error'
     })
   }
 })

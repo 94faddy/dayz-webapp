@@ -39,14 +39,22 @@ export default defineEventHandler(async (event) => {
         // Login user
         const result = await loginUser(email, password, ip, macAddress)
         
-        // ✅ เพิ่ม debug log
-        console.log('🔍 Result from loginUser:', result)
-        console.log('🔍 Result user steamid64:', result.user?.steamid64)
-        
-        // Handle pending approval
-        if (result.status === 'pending_approval') {
+        // ✅ Handle banned users
+        if (result.status === 'banned') {
+          console.log(`🚫 Login blocked - banned user: ${result.user?.name || email}`)
           return {
             success: false,
+            message: result.message,
+            code: result.code,
+            banReason: result.banReason
+          }
+        }
+        
+        // ✅ Handle pending approval
+        if (result.status === 'pending_approval') {
+          console.log(`⏳ Account pending approval: ${result.user.name} (${result.user.email})`)
+          return {
+            success: true,  // ✅ เปลี่ยนจาก false เป็น true
             status: 'pending_approval',
             message: result.message,
             code: 'PENDING_APPROVAL',
@@ -54,7 +62,7 @@ export default defineEventHandler(async (event) => {
           }
         }
         
-        // Update launcher login count
+        // Normal successful login
         await executeQuery(
           'UPDATE users SET launcher_login_count = launcher_login_count + 1, last_launcher_activity = NOW() WHERE id = ?',
           [result.user.id]
@@ -69,7 +77,6 @@ export default defineEventHandler(async (event) => {
           port: config.dayz_server_port || '2302'
         }
         
-        // Try to read from server info file if exists
         try {
           const serverInfoPath = path.join(process.cwd(), 'server_info.txt')
           if (fs.existsSync(serverInfoPath)) {
@@ -83,11 +90,10 @@ export default defineEventHandler(async (event) => {
           console.log('Server info file not found, using config values')
         }
         
-        console.log(`🎮 Launcher login successful: ${result.user.name} (${result.user.email})`)
+        console.log(`✅ Launcher login successful: ${result.user.name} (${result.user.email})`)
         console.log(`   IP: ${ip}, MAC: ${macAddress}, Version: ${launcherVersion}`)
         
-        // ✅ สร้าง response object และ debug ก่อน return
-        const response = {
+        return {
           success: true,
           message: 'Login successful',
           user: {
@@ -100,8 +106,6 @@ export default defineEventHandler(async (event) => {
           server: serverInfo,
           sessionToken: generateSessionToken(result.user.id)
         }
-        
-        return response
       } 
       else if (action === 'register') {
         // Import register functions
@@ -200,7 +204,7 @@ export default defineEventHandler(async (event) => {
           macAddress
         })
         
-        console.log(`📝 Launcher registration: ${name} (${email}) - ID: ${userId}`)
+        console.log(`✅ Launcher registration: ${name} (${email}) - ID: ${userId}`)
         console.log(`   Steam ID: ${steamid64}, IP: ${ip}, MAC: ${macAddress}`)
         
         return {

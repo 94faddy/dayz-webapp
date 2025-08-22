@@ -21,26 +21,50 @@ export async function validateSteamID64(steamid64) {
 }
 
 export async function checkBanStatus(ip, macAddress = null, steamid64 = null) {
-  let query = `
-    SELECT br.*, u.email, u.name 
-    FROM ban_records br
-    LEFT JOIN users u ON br.user_id = u.id
-    WHERE br.is_active = TRUE 
-    AND (br.banned_until IS NULL OR br.banned_until > NOW())
-    AND (
-      br.ip_address = ? 
-      ${macAddress ? 'OR br.mac_address = ?' : ''}
-      ${steamid64 ? 'OR u.steamid64 = ?' : ''}
-    )
-    LIMIT 1
-  `
-  
-  const params = [ip]
-  if (macAddress) params.push(macAddress)
-  if (steamid64) params.push(steamid64)
-  
-  const result = await executeQuery(query, params)
-  return result.length > 0 ? result[0] : null
+  try {
+    // ✅ ปรับปรุงการตรวจสอบ ban status ให้ครอบคลุมมากขึ้น
+    let query = `
+      SELECT br.*, u.email, u.name, u.steamid64
+      FROM ban_records br
+      LEFT JOIN users u ON br.user_id = u.id
+      WHERE br.is_active = TRUE 
+      AND (br.banned_until IS NULL OR br.banned_until > NOW())
+      AND (
+        br.ip_address = ?
+        ${macAddress ? ' OR br.mac_address = ?' : ''}
+        ${steamid64 ? ' OR u.steamid64 = ?' : ''}
+      )
+      ORDER BY br.created_at DESC
+      LIMIT 1
+    `
+    
+    const params = [ip]
+    if (macAddress) params.push(macAddress)
+    if (steamid64) params.push(steamid64)
+    
+    console.log('🔍 Checking ban status for:', { ip, macAddress, steamid64 })
+    
+    const result = await executeQuery(query, params)
+    
+    if (result.length > 0) {
+      const banRecord = result[0]
+      console.log('🚫 Ban record found:', {
+        id: banRecord.id,
+        reason: banRecord.reason,
+        user: banRecord.email,
+        ip: banRecord.ip_address,
+        mac: banRecord.mac_address
+      })
+      return banRecord
+    }
+    
+    console.log('✅ No ban record found')
+    return null
+    
+  } catch (error) {
+    console.error('Error checking ban status:', error)
+    return null
+  }
 }
 
 export async function checkUserExists(email, steamid64) {
@@ -72,82 +96,144 @@ export async function createUser(userData) {
   return result.insertId
 }
 
-export async function loginUser(email, password, ip, macAddress) {
-  // Check ban status first
-  const banStatus = await checkBanStatus(ip, macAddress)
-  if (banStatus) {
-    throw new Error(`Account is banned: ${banStatus.reason}`)
-  }
+// ✅ ปรับปรุงฟังก์ชัน loginUser ให้ส่ง status แทน throw error สำหรับ banned users
+export async function loginUser(email, password, ip, macAddress = null) {
+  console.log(`🔐 Login attempt: ${email} from IP: ${ip}`)
   
-  // Get user - ✅ เพิ่ม steamid64 ในการ SELECT
-  const query = `
-    SELECT id, email, name, steamid64, password, is_active, is_banned, points
-    FROM users 
-    WHERE email = ?
-  `
-  const users = await executeQuery(query, [email])
-  
-  if (users.length === 0) {
-    throw new Error('Invalid email or password')
-  }
-  
-  const user = users[0]
-  
-  if (user.is_banned) {
-    throw new Error('Your account has been banned')
-  }
-  
-  const isValidPassword = await verifyPassword(password, user.password)
-  if (!isValidPassword) {
-    // Log failed attempt
-    await logLoginAttempt(email, ip, false)
-    throw new Error('Invalid email or password')
-  }
-  
-  // แทนที่จะโยน Error ให้ return status แทน
-  if (!user.is_active) {
-    // Log successful password but pending approval
-    await logLoginAttempt(email, ip, true)
+  try {
+    // ✅ ขั้นตอนที่ 1: ค้นหา user โดย email ก่อน (เพื่อได้ steamid64)
+    const userQuery = `
+      SELECT id, email, name, steamid64, password, is_active, is_banned, points
+      FROM users 
+      WHERE email = ?
+    `
+    const users = await executeQuery(userQuery, [email])
+    
+    if (users.length === 0) {
+      console.log(`❌ User not found: ${email}`)
+      await logLoginAttempt(email, ip, false, 'USER_NOT_FOUND')
+      throw new Error('Invalid email or password')
+    }
+    
+    const user = users[0]
+    
+    // ✅ ขั้นตอนที่ 2: ตรวจสอบรหัสผ่านก่อน
+    const isValidPassword = await verifyPassword(password, user.password)
+    if (!isValidPassword) {
+      console.log(`❌ Invalid password for: ${email}`)
+      await logLoginAttempt(email, ip, false, 'INVALID_PASSWORD')
+      throw new Error('Invalid email or password')
+    }
+    
+    // ✅ ขั้นตอนที่ 3: ตรวจสอบ ban status หลังจากรหัสผ่านถูกต้อง
+    // ตรวจสอบทั้ง user ban และ IP/MAC ban
+    const banStatus = await checkBanStatus(ip, macAddress, user.steamid64)
+    if (banStatus) {
+      console.log(`🚫 Login blocked - banned IP/MAC/User: ${ip}/${macAddress}/${user.steamid64}`)
+      const banReason = banStatus.reason || 'Access denied by administrator'
+      await logLoginAttempt(email, ip, false, 'BANNED_IP_MAC_USER')
+      
+      // ✅ ส่ง status แทน throw error
+      return {
+        status: 'banned',
+        message: `Your account is restricted: ${banReason}`,
+        banReason: banReason,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          steamid64: user.steamid64
+        }
+      }
+    }
+    
+    // ✅ ขั้นตอนที่ 4: ตรวจสอบสถานะ banned ใน users table
+    if (user.is_banned) {
+      console.log(`🚫 Login blocked - banned user: ${email}`)
+      await logLoginAttempt(email, ip, false, 'BANNED_USER')
+      
+      // ✅ ส่ง status แทน throw error
+      return {
+        status: 'banned',
+        message: 'Your account has been suspended by administrator',
+        banReason: 'Account suspended',
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          steamid64: user.steamid64
+        }
+      }
+    }
+    
+    // ✅ ขั้นตอนที่ 5: ตรวจสอบสถานะ active (pending approval)
+    if (!user.is_active) {
+      console.log(`⏳ User pending approval: ${email}`)
+      await logLoginAttempt(email, ip, true, 'PENDING_APPROVAL')
+      
+      return {
+        status: 'pending_approval',
+        message: 'Your account is pending admin approval. Please wait for approval notification.',
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          steamid64: user.steamid64,
+          points: user.points || 0
+        }
+      }
+    }
+    
+    // ✅ ขั้นตอนที่ 6: Login สำเร็จ - อัปเดตข้อมูล
+    try {
+      await executeQuery(
+        'UPDATE users SET last_login = NOW(), last_ip = ?, mac_address = ? WHERE id = ?',
+        [ip, macAddress, user.id]
+      )
+    } catch (updateError) {
+      console.warn('Failed to update user login info:', updateError.message)
+    }
+    
+    // Log successful attempt
+    await logLoginAttempt(email, ip, true, 'SUCCESS')
+    
+    console.log(`✅ Login successful: ${user.name} (${email})`)
     
     return {
-      status: 'pending_approval',
-      message: 'Your account is pending admin approval. Please wait for approval notification.',
+      status: 'success',
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
-        steamid64: user.steamid64 // ✅ เพิ่ม steamid64
+        steamid64: user.steamid64,
+        points: user.points || 0
       }
     }
-  }
-  
-  // Update last login
-  await executeQuery(
-    'UPDATE users SET last_login = NOW(), last_ip = ?, mac_address = ? WHERE id = ?',
-    [ip, macAddress, user.id]
-  )
-  
-  // Log successful attempt
-  await logLoginAttempt(email, ip, true)
-  
-  return {
-    status: 'success',
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      steamid64: user.steamid64, // ✅ เพิ่ม steamid64
-      points: user.points || 0
-    }
+    
+  } catch (error) {
+    // ✅ ให้แน่ใจว่า error ที่ throw ออกไปมี message ที่ชัดเจน
+    console.error(`❌ Login error for ${email}:`, error.message)
+    throw error
   }
 }
 
-export async function logLoginAttempt(email, ip, success) {
-  const query = `
-    INSERT INTO login_attempts (email, ip_address, success)
-    VALUES (?, ?, ?)
-  `
-  await executeQuery(query, [email, ip, success])
+// ✅ ปรับปรุงฟังก์ชัน logLoginAttempt ให้ทำงานกับโครงสร้างเดิม
+export async function logLoginAttempt(email, ip, success, reason = null) {
+  try {
+    // ✅ ใช้โครงสร้างเดิมของตาราง login_attempts (ไม่มี created_at และ reason)
+    const query = `
+      INSERT INTO login_attempts (email, ip_address, success)
+      VALUES (?, ?, ?)
+    `
+    await executeQuery(query, [email, ip, success])
+    
+    // ✅ Log reason ใน console แทนการเก็บในฐานข้อมูล
+    if (reason) {
+      console.log(`📝 Login attempt logged: ${email} - ${success ? 'SUCCESS' : 'FAILED'} - Reason: ${reason}`)
+    }
+  } catch (error) {
+    console.warn('Failed to log login attempt:', error.message)
+  }
 }
 
 export async function getServerConfig() {

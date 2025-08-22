@@ -1,3 +1,4 @@
+// server/api/launcher/validate.post.js - เเก้ไขเเค่การแสดงผล
 import { getHeader } from 'h3'
 import { executeQuery } from '~/utils/database.js'
 
@@ -46,7 +47,7 @@ export default defineEventHandler(async (event) => {
         }
       }
       
-      // ✅ ดึงข้อมูลผู้ใช้โดยไม่กรองสถานะ ban ก่อน (เพื่อตรวจสอบว่าถูกแบนหรือไม่)
+      // Get user data
       const validationQuery = `
         SELECT 
           id,
@@ -76,11 +77,10 @@ export default defineEventHandler(async (event) => {
       
       const user = users[0]
       
-      // ✅ ตรวจสอบสถานะ ban หลังจากดึงข้อมูลแล้ว
+      // ✅ **ปัญหาตรงนี้** - banned/suspended ให้ข้อมูลที่ชัดเจนแต่ไม่ใช่ error ทั่วไป
       if (user.is_banned || !user.is_active) {
         console.log(`🚫 Banned/inactive user validation: ${user.name} (${user.email}) - Banned: ${user.is_banned}, Active: ${user.is_active}`)
         
-        // ✅ ส่งข้อมูลผู้ใช้และสถานะ ban กลับไป
         const response = {
           success: false,
           message: user.is_banned ? 'Account has been banned' : 'Account has been suspended',
@@ -88,7 +88,7 @@ export default defineEventHandler(async (event) => {
           banReason: user.is_banned ? 'Account banned by administrator' : 'Account suspended'
         }
         
-        // ✅ ส่งข้อมูลผู้ใช้ด้วยเมื่อขอมา (สำคัญ!)
+        // Include user data if requested (important for proper notification)
         if (includeUserData) {
           response.user = {
             id: user.id,
@@ -106,7 +106,7 @@ export default defineEventHandler(async (event) => {
         return response
       }
       
-      // ✅ ผู้ใช้ปกติ - อัปเดต activity
+      // Valid user - update activity
       try {
         await executeQuery(
           'UPDATE users SET last_launcher_activity = NOW(), last_ip = ? WHERE id = ?',
@@ -116,14 +116,14 @@ export default defineEventHandler(async (event) => {
         console.warn('Failed to update user activity:', updateError.message)
       }
       
-      // ✅ ส่งผลลัพธ์สำเร็จ
+      // Success response
       const response = {
         success: true,
         message: 'Session is valid',
         code: 'VALID_SESSION'
       }
       
-      // ✅ ส่งข้อมูลผู้ใช้หากขอมา
+      // Include user data if requested
       if (includeUserData) {
         response.user = {
           id: user.id,
