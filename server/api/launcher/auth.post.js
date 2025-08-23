@@ -50,19 +50,36 @@ export default defineEventHandler(async (event) => {
           }
         }
         
-        // ✅ Handle pending approval
+        // ✅ Handle pending approval (inactive users) - แก้ไข logic
         if (result.status === 'pending_approval') {
-          console.log(`⏳ Account pending approval: ${result.user.name} (${result.user.email})`)
+          console.log(`⏳ Account pending approval or deactivated: ${result.user.name} (${result.user.email}) - Active: ${result.user.is_active}`)
           return {
-            success: true,  // ✅ เปลี่ยนจาก false เป็น true
-            status: 'pending_approval',
-            message: result.message,
-            code: 'PENDING_APPROVAL',
-            user: result.user
+            success: false,  // ✅ เปลี่ยนกลับเป็น false เพื่อบล็อก login
+            status: 'account_inactive',
+            message: result.user.is_active === false ? 'Account has been deactivated by administrator. Please contact support.' : result.message,
+            code: result.user.is_active === false ? 'ACCOUNT_DEACTIVATED' : 'PENDING_APPROVAL',
+            user: {
+              id: result.user.id,
+              email: result.user.email,
+              name: result.user.name,
+              is_active: result.user.is_active,
+              is_banned: result.user.is_banned
+            }
           }
         }
         
-        // Normal successful login
+        // ✅ Double check user is active and not banned before allowing login
+        if (!result.user || !result.user.is_active || result.user.is_banned) {
+          console.log(`🚫 Login denied - user inactive or banned: ${result.user?.name || email}`)
+          console.log(`   Active: ${result.user?.is_active}, Banned: ${result.user?.is_banned}`)
+          return {
+            success: false,
+            message: result.user?.is_banned ? 'Account has been banned' : 'Account has been deactivated',
+            code: result.user?.is_banned ? 'ACCOUNT_BANNED' : 'ACCOUNT_DEACTIVATED'
+          }
+        }
+        
+        // Normal successful login - only for active, non-banned users
         await executeQuery(
           'UPDATE users SET launcher_login_count = launcher_login_count + 1, last_launcher_activity = NOW() WHERE id = ?',
           [result.user.id]
@@ -92,6 +109,7 @@ export default defineEventHandler(async (event) => {
         
         console.log(`✅ Launcher login successful: ${result.user.name} (${result.user.email})`)
         console.log(`   IP: ${ip}, MAC: ${macAddress}, Version: ${launcherVersion}`)
+        console.log(`   User Status - Active: ${result.user.is_active}, Banned: ${result.user.is_banned}`)
         
         return {
           success: true,
@@ -101,7 +119,9 @@ export default defineEventHandler(async (event) => {
             email: result.user.email,
             name: result.user.name,
             steamid64: result.user.steamid64,
-            points: result.user.points
+            points: result.user.points,
+            is_active: result.user.is_active,
+            is_banned: result.user.is_banned
           },
           server: serverInfo,
           sessionToken: generateSessionToken(result.user.id)
@@ -250,6 +270,7 @@ function generateSessionToken(userId) {
 function getErrorCode(message) {
   if (message.includes('banned')) return 'ACCOUNT_BANNED'
   if (message.includes('pending approval')) return 'PENDING_APPROVAL'
+  if (message.includes('deactivated')) return 'ACCOUNT_DEACTIVATED'
   if (message.includes('Invalid email')) return 'INVALID_CREDENTIALS'
   if (message.includes('Invalid password')) return 'INVALID_CREDENTIALS'
   return 'AUTH_FAILED'

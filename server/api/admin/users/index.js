@@ -196,7 +196,10 @@ async function performUserAction(event, admin, ip) {
     case 'unban':
       return await unbanUser(userId, admin, ip)
     case 'approve':
-      return await approveUser(userId, admin, ip)
+    case 'activate':
+      return await activateUser(userId, admin, ip)
+    case 'deactivate':
+      return await deactivateUser(userId, admin, ip)
     case 'add_points':
       return await addPoints(userId, data.amount, data.reason, admin, ip)
     default:
@@ -320,7 +323,7 @@ async function unbanUser(userId, admin, ip) {
   }
 }
 
-async function approveUser(userId, admin, ip) {
+async function activateUser(userId, admin, ip) {
   // Check permission
   if (!await hasAdminPermission(admin.id, 'users:write')) {
     throw createError({
@@ -338,6 +341,14 @@ async function approveUser(userId, admin, ip) {
     })
   }
   
+  // Check if user is already active
+  if (user.is_active) {
+    return {
+      success: true,
+      message: 'User is already active'
+    }
+  }
+  
   // Update user active status
   await executeQuery(
     'UPDATE users SET is_active = TRUE WHERE id = ?',
@@ -347,10 +358,10 @@ async function approveUser(userId, admin, ip) {
   // Log activity
   await logAdminActivity(
     admin.id,
-    'approve_user',
+    'activate_user',
     'user',
     userId,
-    `Approved user: ${user.email}`,
+    `Activated user: ${user.email}`,
     { is_active: false },
     { is_active: true },
     ip
@@ -358,7 +369,57 @@ async function approveUser(userId, admin, ip) {
   
   return {
     success: true,
-    message: 'User approved successfully'
+    message: 'User activated successfully'
+  }
+}
+
+async function deactivateUser(userId, admin, ip) {
+  // Check permission
+  if (!await hasAdminPermission(admin.id, 'users:write')) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Permission denied'
+    })
+  }
+  
+  // Get user details
+  const [user] = await executeQuery('SELECT * FROM users WHERE id = ?', [userId])
+  if (!user) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'User not found'
+    })
+  }
+  
+  // Check if user is already inactive
+  if (!user.is_active) {
+    return {
+      success: true,
+      message: 'User is already inactive'
+    }
+  }
+  
+  // Update user active status
+  await executeQuery(
+    'UPDATE users SET is_active = FALSE WHERE id = ?',
+    [userId]
+  )
+  
+  // Log activity
+  await logAdminActivity(
+    admin.id,
+    'deactivate_user',
+    'user',
+    userId,
+    `Deactivated user: ${user.email}`,
+    { is_active: true },
+    { is_active: false },
+    ip
+  )
+  
+  return {
+    success: true,
+    message: 'User deactivated successfully'
   }
 }
 

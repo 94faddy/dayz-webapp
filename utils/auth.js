@@ -85,25 +85,25 @@ export async function createUser(userData) {
   const isActive = config.auto_approve_users === 'true'
   
   const query = `
-    INSERT INTO users (email, name, steamid64, password, is_active, last_ip, mac_address)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (email, name, steamid64, password, is_active, last_ip, mac_address, registration_ip, registration_mac)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
   
   const result = await executeQuery(query, [
-    email, name, steamid64, hashedPassword, isActive, ip, macAddress
+    email, name, steamid64, hashedPassword, isActive, ip, macAddress, ip, macAddress
   ])
   
   return result.insertId
 }
 
-// ✅ ปรับปรุงฟังก์ชัน loginUser ให้ส่ง status แทน throw error สำหรับ banned users
+// ✅ แก้ไข loginUser ให้ส่ง is_active กลับมาด้วย
 export async function loginUser(email, password, ip, macAddress = null) {
   console.log(`🔐 Login attempt: ${email} from IP: ${ip}`)
   
   try {
     // ✅ ขั้นตอนที่ 1: ค้นหา user โดย email ก่อน (เพื่อได้ steamid64)
     const userQuery = `
-      SELECT id, email, name, steamid64, password, is_active, is_banned, points
+      SELECT id, email, name, steamid64, password, is_active, is_banned, points, banned_reason
       FROM users 
       WHERE email = ?
     `
@@ -116,6 +116,7 @@ export async function loginUser(email, password, ip, macAddress = null) {
     }
     
     const user = users[0]
+    console.log(`🔍 User found: ${user.name} - Active: ${user.is_active}, Banned: ${user.is_banned}`)
     
     // ✅ ขั้นตอนที่ 2: ตรวจสอบรหัสผ่านก่อน
     const isValidPassword = await verifyPassword(password, user.password)
@@ -136,13 +137,16 @@ export async function loginUser(email, password, ip, macAddress = null) {
       // ✅ ส่ง status แทน throw error
       return {
         status: 'banned',
+        code: 'ACCOUNT_BANNED',
         message: `Your account is restricted: ${banReason}`,
         banReason: banReason,
         user: {
           id: user.id,
           email: user.email,
           name: user.name,
-          steamid64: user.steamid64
+          steamid64: user.steamid64,
+          is_active: user.is_active,  // ✅ เพิ่มการส่ง is_active
+          is_banned: user.is_banned
         }
       }
     }
@@ -155,31 +159,37 @@ export async function loginUser(email, password, ip, macAddress = null) {
       // ✅ ส่ง status แทน throw error
       return {
         status: 'banned',
+        code: 'ACCOUNT_BANNED',
         message: 'Your account has been suspended by administrator',
-        banReason: 'Account suspended',
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          steamid64: user.steamid64
-        }
-      }
-    }
-    
-    // ✅ ขั้นตอนที่ 5: ตรวจสอบสถานะ active (pending approval)
-    if (!user.is_active) {
-      console.log(`⏳ User pending approval: ${email}`)
-      await logLoginAttempt(email, ip, true, 'PENDING_APPROVAL')
-      
-      return {
-        status: 'pending_approval',
-        message: 'Your account is pending admin approval. Please wait for approval notification.',
+        banReason: user.banned_reason || 'Account suspended',
         user: {
           id: user.id,
           email: user.email,
           name: user.name,
           steamid64: user.steamid64,
-          points: user.points || 0
+          is_active: user.is_active,  // ✅ เพิ่มการส่ง is_active
+          is_banned: user.is_banned
+        }
+      }
+    }
+    
+    // ✅ ขั้นตอนที่ 5: ตรวจสอบสถานะ active (pending approval หรือ deactivated)
+    if (!user.is_active) {
+      console.log(`⏳ User pending approval or deactivated: ${email} - Active: ${user.is_active}`)
+      await logLoginAttempt(email, ip, true, 'PENDING_APPROVAL')
+      
+      return {
+        status: 'pending_approval',
+        code: 'ACCOUNT_INACTIVE',
+        message: 'Your account is currently inactive. Please contact administrator for activation.',
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          steamid64: user.steamid64,
+          points: user.points || 0,
+          is_active: user.is_active,  // ✅ ส่ง is_active กลับมา
+          is_banned: user.is_banned
         }
       }
     }
@@ -197,7 +207,7 @@ export async function loginUser(email, password, ip, macAddress = null) {
     // Log successful attempt
     await logLoginAttempt(email, ip, true, 'SUCCESS')
     
-    console.log(`✅ Login successful: ${user.name} (${email})`)
+    console.log(`✅ Login successful: ${user.name} (${email}) - Active: ${user.is_active}`)
     
     return {
       status: 'success',
@@ -206,7 +216,9 @@ export async function loginUser(email, password, ip, macAddress = null) {
         email: user.email,
         name: user.name,
         steamid64: user.steamid64,
-        points: user.points || 0
+        points: user.points || 0,
+        is_active: user.is_active,  // ✅ ส่ง is_active กลับมา
+        is_banned: user.is_banned
       }
     }
     

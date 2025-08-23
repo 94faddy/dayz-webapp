@@ -1,4 +1,4 @@
-// server/api/launcher/validate.post.js - เเก้ไขเเค่การแสดงผล
+// server/api/launcher/validate.post.js - แก้ไขการตรวจสอบสถานะ
 import { getHeader } from 'h3'
 import { executeQuery } from '~/utils/database.js'
 
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
         }
       }
       
-      // Get user data
+      // Get user data with ban reason
       const validationQuery = `
         SELECT 
           id,
@@ -57,6 +57,7 @@ export default defineEventHandler(async (event) => {
           points,
           is_active,
           is_banned,
+          banned_reason,
           created_at,
           last_ip,
           last_launcher_activity
@@ -77,18 +78,44 @@ export default defineEventHandler(async (event) => {
       
       const user = users[0]
       
-      // ✅ **ปัญหาตรงนี้** - banned/suspended ให้ข้อมูลที่ชัดเจนแต่ไม่ใช่ error ทั่วไป
-      if (user.is_banned || !user.is_active) {
-        console.log(`🚫 Banned/inactive user validation: ${user.name} (${user.email}) - Banned: ${user.is_banned}, Active: ${user.is_active}`)
+      // ✅ **เข้มงวดขึ้น** - ต้องเป็น active = true AND banned = false เท่านั้น
+      if (user.is_banned) {
+        console.log(`🚫 Banned user validation blocked: ${user.name} (${user.email}) - Reason: ${user.banned_reason}`)
         
         const response = {
           success: false,
-          message: user.is_banned ? 'Account has been banned' : 'Account has been suspended',
-          code: user.is_banned ? 'ACCOUNT_BANNED' : 'ACCOUNT_SUSPENDED',
-          banReason: user.is_banned ? 'Account banned by administrator' : 'Account suspended'
+          message: 'Account has been banned',
+          code: 'ACCOUNT_BANNED',
+          banReason: user.banned_reason || 'Account banned by administrator'
         }
         
-        // Include user data if requested (important for proper notification)
+        if (includeUserData) {
+          response.user = {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            steamid64: user.steamid64,
+            points: user.points || 0,
+            is_active: user.is_active,
+            is_banned: user.is_banned,
+            banned_reason: user.banned_reason,
+            created_at: user.created_at,
+            last_activity: user.last_launcher_activity
+          }
+        }
+        
+        return response
+      }
+      
+      if (!user.is_active) {
+        console.log(`🚫 Inactive user validation blocked: ${user.name} (${user.email}) - Account deactivated`)
+        
+        const response = {
+          success: false,
+          message: 'Account has been deactivated by administrator',
+          code: 'ACCOUNT_DEACTIVATED'
+        }
+        
         if (includeUserData) {
           response.user = {
             id: user.id,
@@ -106,7 +133,7 @@ export default defineEventHandler(async (event) => {
         return response
       }
       
-      // Valid user - update activity
+      // Valid user - update activity (only for active users)
       try {
         await executeQuery(
           'UPDATE users SET last_launcher_activity = NOW(), last_ip = ? WHERE id = ?',
@@ -139,6 +166,7 @@ export default defineEventHandler(async (event) => {
       }
       
       console.log(`✅ Session validation successful: ${user.name} (${user.email}) from IP: ${ip}`)
+      console.log(`   Status - Active: ${user.is_active}, Banned: ${user.is_banned}`)
       
       return response
       

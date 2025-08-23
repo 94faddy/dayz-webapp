@@ -90,6 +90,28 @@
                         >
                           Edit
                         </button>
+                        
+                        <!-- Status Controls - Show different buttons based on current status -->
+                        <template v-if="!user.is_banned">
+                          <button
+                            v-if="user.is_active"
+                            @click="deactivateUser(user.id)"
+                            class="text-yellow-400 hover:text-yellow-300"
+                            title="Deactivate user"
+                          >
+                            Deactivate
+                          </button>
+                          <button
+                            v-else
+                            @click="activateUser(user.id)"
+                            class="text-green-400 hover:text-green-300"
+                            title="Activate user"
+                          >
+                            Activate
+                          </button>
+                        </template>
+                        
+                        <!-- Ban/Unban Controls -->
                         <button
                           v-if="!user.is_banned"
                           @click="openBanModal(user)"
@@ -103,13 +125,6 @@
                           class="text-green-400 hover:text-green-300"
                         >
                           Unban
-                        </button>
-                        <button
-                          v-if="!user.is_active && !user.is_banned"
-                          @click="approveUser(user.id)"
-                          class="text-green-400 hover:text-green-300"
-                        >
-                          Approve
                         </button>
                       </div>
                     </td>
@@ -158,16 +173,7 @@
                 class="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:border-red-500"
               >
             </div>
-            <div class="flex items-center space-x-4">
-              <label class="flex items-center">
-                <input
-                  v-model="editModal.user.is_active"
-                  type="checkbox"
-                  class="mr-2"
-                >
-                <span class="text-sm text-gray-400">Active</span>
-              </label>
-            </div>
+
           </div>
           <div class="mt-6 flex justify-end space-x-3">
             <button
@@ -303,6 +309,16 @@
           </div>
         </div>
       </div>
+
+      <!-- Success/Error Messages -->
+      <div v-if="message.show" class="fixed top-4 right-4 z-50">
+        <div :class="[
+          'p-4 rounded-lg shadow-lg',
+          message.type === 'success' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
+        ]">
+          {{ message.text }}
+        </div>
+      </div>
     </NuxtLayout>
   </div>
 </template>
@@ -339,6 +355,8 @@ const pointsModal = ref({
   reason: ''
 })
 
+const message = ref({ show: false, type: '', text: '' })
+
 const filteredUsers = computed(() => {
   let filtered = users.value
   
@@ -374,6 +392,7 @@ const loadUsers = async () => {
     users.value = response.users
   } catch (error) {
     console.error('Failed to load users:', error)
+    showMessage('error', 'Failed to load users')
   }
 }
 
@@ -398,9 +417,7 @@ const saveUserEdit = async () => {
     if (original.steamid64 !== editModal.value.user.steamid64) {
       updates.push({ field: 'steamid64', value: editModal.value.user.steamid64 })
     }
-    if (original.is_active !== editModal.value.user.is_active) {
-      updates.push({ field: 'is_active', value: editModal.value.user.is_active })
-    }
+
     if (editModal.value.newPassword) {
       updates.push({ field: 'password', value: editModal.value.newPassword })
     }
@@ -419,8 +436,10 @@ const saveUserEdit = async () => {
     
     editModal.value.show = false
     await loadUsers()
+    showMessage('success', 'User updated successfully')
   } catch (error) {
     console.error('Failed to save user:', error)
+    showMessage('error', 'Failed to update user')
   }
 }
 
@@ -451,8 +470,10 @@ const banUser = async () => {
     
     banModal.value.show = false
     await loadUsers()
+    showMessage('success', 'User banned successfully')
   } catch (error) {
     console.error('Failed to ban user:', error)
+    showMessage('error', 'Failed to ban user')
   }
 }
 
@@ -466,23 +487,49 @@ const unbanUser = async (userId) => {
       }
     })
     await loadUsers()
+    showMessage('success', 'User unbanned successfully')
   } catch (error) {
     console.error('Failed to unban user:', error)
+    showMessage('error', 'Failed to unban user')
   }
 }
 
-const approveUser = async (userId) => {
+// New functions for activate/deactivate
+const activateUser = async (userId) => {
   try {
     await $fetch('/api/admin/users', {
       method: 'POST',
       body: {
-        action: 'approve',
+        action: 'activate',
         userId
       }
     })
     await loadUsers()
+    showMessage('success', 'User activated successfully')
   } catch (error) {
-    console.error('Failed to approve user:', error)
+    console.error('Failed to activate user:', error)
+    showMessage('error', 'Failed to activate user')
+  }
+}
+
+const deactivateUser = async (userId) => {
+  if (!confirm('Are you sure you want to deactivate this user? They will not be able to login until reactivated.')) {
+    return
+  }
+  
+  try {
+    await $fetch('/api/admin/users', {
+      method: 'POST',
+      body: {
+        action: 'deactivate',
+        userId
+      }
+    })
+    await loadUsers()
+    showMessage('success', 'User deactivated successfully')
+  } catch (error) {
+    console.error('Failed to deactivate user:', error)
+    showMessage('error', 'Failed to deactivate user')
   }
 }
 
@@ -518,9 +565,18 @@ const adjustPoints = async () => {
     
     pointsModal.value.show = false
     await loadUsers()
+    showMessage('success', 'Points adjusted successfully')
   } catch (error) {
     console.error('Failed to adjust points:', error)
+    showMessage('error', 'Failed to adjust points')
   }
+}
+
+const showMessage = (type, text) => {
+  message.value = { show: true, type, text }
+  setTimeout(() => {
+    message.value.show = false
+  }, 3000)
 }
 
 const formatDate = (date) => {
