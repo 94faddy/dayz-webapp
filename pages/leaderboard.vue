@@ -127,11 +127,13 @@
                   </div>
                 </td>
 
-                <!-- Player Name -->
+                <!-- Player Name with Consistent Avatar -->
                 <td class="py-4 px-6">
                   <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center">
-                      <span class="text-white font-semibold text-sm">{{ getPlayerInitial(player.player_name) }}</span>
+                    <!-- Consistent Avatar System -->
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-600"
+                         :style="getConsistentPlayerAvatarStyle(player.player_name)">
+                      {{ getPlayerInitial(player.player_name) }}
                     </div>
                     <div>
                       <div class="flex items-center space-x-2">
@@ -222,6 +224,8 @@
 </template>
 
 <script setup>
+import { getConsistentColorForName } from '~/utils/avatar.js'
+
 // Meta
 definePageMeta({
   title: 'Historical Leaderboard',
@@ -291,6 +295,17 @@ const formatDate = (dateString) => {
 
 const getPlayerInitial = (name) => {
   return name ? name.charAt(0).toUpperCase() : 'U'
+}
+
+// Use the SAME consistent function as Header and Profile
+const getConsistentPlayerAvatarStyle = (name) => {
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    return { backgroundColor: '#dc2626' } // Default red
+  }
+  
+  // Use the SAME function from utils/avatar.js
+  const color = getConsistentColorForName(name)
+  return { backgroundColor: color }
 }
 
 const getRankDisplay = (index) => {
@@ -421,3 +436,19 @@ onMounted(async () => {
   await loadHistoricalLeaderboard()
 })
 </script>
+
+<style scoped>
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #dc2626;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>

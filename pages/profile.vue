@@ -4,22 +4,10 @@
       <!-- Profile Header -->
       <div class="dayz-card p-8 mb-8">
         <div class="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6">
-          <!-- Avatar -->
-          <div class="relative group cursor-pointer" @click="showEditAvatar">
-            <div class="w-24 h-24 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200 group-hover:scale-105 overflow-hidden border-4 border-gray-600 group-hover:border-red-500"
-                 :style="getAvatarStyle()">
-              <div v-if="avatar.type === 'preset'" 
-                   class="w-full h-full flex items-center justify-center text-4xl">
-                {{ avatar.emoji }}
-              </div>
-              <span v-else class="text-3xl font-bold text-white">{{ getAvatarInitial() }}</span>
-            </div>
-            <!-- Edit overlay -->
-            <div class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-              </svg>
-            </div>
+          <!-- Avatar - Simple Display Only -->
+          <div class="w-24 h-24 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-4xl border-4 border-gray-600"
+               :style="getConsistentAvatarStyle()">
+            {{ getAvatarInitial() }}
           </div>
           
           <!-- User Info -->
@@ -54,12 +42,6 @@
           
           <!-- Actions -->
           <div class="flex space-x-3">
-            <button 
-              @click="showEditAvatar"
-              class="dayz-button-secondary"
-            >
-              Edit Avatar
-            </button>
             <button 
               @click="showChangePassword"
               class="dayz-button-primary"
@@ -474,8 +456,22 @@
                   />
                 </div>
                 
+                <div>
+                  <label class="dayz-label">Avatar</label>
+                  <div class="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg">
+                    <div class="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg border-2 border-gray-600"
+                         :style="getConsistentAvatarStyle()">
+                      {{ getAvatarInitial() }}
+                    </div>
+                    <div>
+                      <p class="text-white font-medium">{{ getAvatarInitial() }} - {{ profile?.name }}</p>
+                      <p class="text-xs text-gray-400">Avatar is automatically generated from your name</p>
+                    </div>
+                  </div>
+                </div>
+                
                 <p class="text-xs text-gray-400">
-                  Email and Steam ID cannot be changed. Contact support if you need assistance.
+                  Email, Steam ID, and Avatar cannot be changed. Contact support if you need assistance.
                 </p>
               </div>
             </div>
@@ -483,12 +479,12 @@
         </div>
       </div>
     </div>
-    
   </div>
 </template>
 
 <script setup>
 import Swal from 'sweetalert2'
+import { getConsistentColorForName } from '~/utils/avatar.js'
 
 // Meta
 definePageMeta({
@@ -504,7 +500,6 @@ const profile = ref(null)
 const transactions = ref([])
 const purchases = ref([])
 const maxNameChanges = ref(1)
-const showDebugInfo = ref(process.dev) // แสดง debug info เฉพาะ development
 
 // Pagination state
 const itemsPerPage = ref(10)
@@ -518,27 +513,6 @@ const saving = ref(false)
 const nameChanged = ref(false)
 const countdownText = ref('')
 const countdownInterval = ref(null)
-
-// Avatar system
-const avatar = ref({
-  type: 'initial', // 'initial', 'preset'
-  color: '#dc2626',
-  emoji: '🧔'
-})
-
-// DayZ Style Avatar Presets
-const dayzAvatars = [
-  { id: 1, emoji: '🧔', name: 'Bearded Survivor', color: '#8B4513' },
-  { id: 2, emoji: '👩‍🦰', name: 'Red Hair Fighter', color: '#DC143C' },
-  { id: 3, emoji: '👨‍🦲', name: 'Bald Warrior', color: '#2F4F4F' },
-  { id: 4, emoji: '👩‍🦱', name: 'Curly Medic', color: '#228B22' },
-  { id: 5, emoji: '👨‍🦳', name: 'Gray Fox', color: '#708090' },
-  { id: 6, emoji: '👩‍🦳', name: 'Veteran Lady', color: '#4B0082' },
-  { id: 7, emoji: '🧑‍🦱', name: 'Young Scout', color: '#FF8C00' },
-  { id: 8, emoji: '👱‍♂️', name: 'Blonde Ranger', color: '#FFD700' },
-  { id: 9, emoji: '👱‍♀️', name: 'Blonde Sniper', color: '#00CED1' },
-  { id: 10, emoji: '🧑‍🦰', name: 'Red Beard', color: '#B22222' }
-]
 
 // Tabs
 const tabs = [
@@ -579,15 +553,13 @@ const visiblePurchasePages = computed(() => {
 // Helper function for pagination
 const getVisiblePages = (currentPage, totalPages) => {
   const pages = []
-  const showPages = 5 // จำนวนหน้าที่จะแสดง
+  const showPages = 5
   
   if (totalPages <= showPages) {
-    // แสดงทุกหน้าถ้าหน้าไม่เยอะ
     for (let i = 1; i <= totalPages; i++) {
       pages.push(i)
     }
   } else {
-    // แสดงหน้าแบบย่อ
     const start = Math.max(1, currentPage - 2)
     const end = Math.min(totalPages, currentPage + 2)
     
@@ -711,18 +683,26 @@ const getAvatarInitial = () => {
   return profile.value?.name?.charAt(0)?.toUpperCase() || 'U'
 }
 
-const getAvatarStyle = () => {
-  if (avatar.value.type === 'preset') {
-    return { backgroundColor: avatar.value.color }
-  } else {
-    return { backgroundColor: avatar.value.color }
+// Use the SAME consistent function as Header and Leaderboard
+const getConsistentAvatarStyle = () => {
+  // First try to get color from user's avatar_data
+  if (user.value && user.value.avatar_data && user.value.avatar_data.color) {
+    return { backgroundColor: user.value.avatar_data.color }
   }
+  
+  // Fallback: use the SAME consistent function as everywhere else
+  if (profile.value && profile.value.name) {
+    const color = getConsistentColorForName(profile.value.name)
+    return { backgroundColor: color }
+  }
+  
+  // Default color
+  return { backgroundColor: '#dc2626' }
 }
 
 const getNameChangesThisMonth = () => {
   if (!profile.value) return 0
   
-  // ถ้าไม่เคยเปลี่ยนชื่อเลย
   if (!profile.value.last_name_change || profile.value.name_change_count === 0) return 0
   
   const currentMonth = new Date().getMonth()
@@ -732,7 +712,6 @@ const getNameChangesThisMonth = () => {
   const isSameMonth = lastChangeDate.getMonth() === currentMonth && 
                      lastChangeDate.getFullYear() === currentYear
   
-  // ถ้าไม่ใช่เดือนเดียวกัน ให้ return 0
   return isSameMonth ? (profile.value.name_change_count || 0) : 0
 }
 
@@ -742,7 +721,7 @@ const getNextAllowedChangeDate = () => {
   const lastChange = new Date(profile.value.last_name_change)
   const nextAllowed = new Date(lastChange)
   nextAllowed.setMonth(nextAllowed.getMonth() + 1)
-  nextAllowed.setDate(1) // วันที่ 1 ของเดือนถัดไป
+  nextAllowed.setDate(1)
   
   return nextAllowed.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -762,16 +741,14 @@ const calculateCountdown = () => {
   const nextAllowed = new Date(lastChange)
   nextAllowed.setMonth(nextAllowed.getMonth() + 1)
   nextAllowed.setDate(1)
-  nextAllowed.setHours(0, 0, 0, 0) // เริ่มต้นวัน
+  nextAllowed.setHours(0, 0, 0, 0)
   
   const now = new Date()
   const timeDiff = nextAllowed.getTime() - now.getTime()
   
   if (timeDiff <= 0) {
     countdownText.value = 'Available now!'
-    // อัปเดต canChangeName
     if (profile.value) {
-      // Trigger reactivity update
       profile.value = { ...profile.value }
     }
     return
@@ -798,10 +775,8 @@ const startCountdown = () => {
     clearInterval(countdownInterval.value)
   }
   
-  // คำนวณทันที
   calculateCountdown()
   
-  // อัปเดตทุกวินาที
   countdownInterval.value = setInterval(() => {
     calculateCountdown()
   }, 1000)
@@ -813,26 +788,6 @@ const stopCountdown = () => {
     countdownInterval.value = null
   }
   countdownText.value = ''
-}
-
-// โหลด avatar จาก database
-const loadAvatarFromProfile = () => {
-  if (profile.value?.avatar_data) {
-    console.log('🎨 Loading avatar from database:', profile.value.avatar_data)
-    avatar.value = {
-      type: profile.value.avatar_data.type || 'initial',
-      color: profile.value.avatar_data.color || '#dc2626',
-      emoji: profile.value.avatar_data.emoji || '🧔',
-      id: profile.value.avatar_data.id || null
-    }
-  } else {
-    // Default avatar
-    avatar.value = {
-      type: 'initial',
-      color: '#dc2626',
-      emoji: '🧔'
-    }
-  }
 }
 
 // Name editing functions
@@ -868,13 +823,11 @@ const validateName = (name) => {
 const handleNameChange = async () => {
   const newName = editableName.value.trim()
   
-  // ถ้าไม่มีการเปลี่ยนแปลง ไม่ต้องทำอะไร
   if (newName === originalName.value) {
     nameChanged.value = false
     return
   }
   
-  // Validate
   const error = validateName(newName)
   if (error) {
     alert(error)
@@ -907,8 +860,11 @@ const handleNameChange = async () => {
       profile.value.name_change_count = response.nameChangeCount
       profile.value.last_name_change = response.lastNameChange
       
-      // Update user state สำหรับ header
+      // Update user state สำหรับ header (รวม avatar ใหม่)
       user.value.name = newName
+      if (response.avatarData) {
+        user.value.avatar_data = response.avatarData
+      }
       
       // Update refs
       originalName.value = newName
@@ -916,12 +872,10 @@ const handleNameChange = async () => {
       
       console.log('✅ Name changed successfully:', newName)
       
-      // เริ่ม countdown ใหม่หลังจากเปลี่ยนชื่อ
       if (!canChangeName.value) {
         startCountdown()
       }
       
-      // แสดง success เป็นเวลาสั้นๆ
       setTimeout(() => {
         nameChanged.value = false
       }, 3000)
@@ -956,152 +910,6 @@ watch(() => canChangeName.value, (canChange) => {
 onUnmounted(() => {
   stopCountdown()
 })
-
-const showEditAvatar = async () => {
-  // Create avatar options HTML
-  const presetOptions = dayzAvatars.map(preset => 
-    `<button type="button" class="avatar-option flex flex-col items-center p-3 rounded-lg border-2 border-gray-600 hover:border-red-500 transition-colors m-2 bg-gray-800" 
-             data-type="preset" 
-             data-id="${preset.id}"
-             data-emoji="${preset.emoji}"
-             data-color="${preset.color}"
-             title="${preset.name}">
-       <div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl mb-2" style="background-color: ${preset.color}">
-         ${preset.emoji}
-       </div>
-       <span class="text-xs text-gray-300">${preset.name}</span>
-     </button>`
-  ).join('')
-  
-  const { value: result } = await Swal.fire({
-    title: 'Choose Your Survivor Avatar',
-    html: `
-      <div class="text-center">
-        <!-- Current Preview -->
-        <div class="mb-6">
-          <div id="avatar-preview" class="w-24 h-24 rounded-full mx-auto flex items-center justify-center text-3xl font-bold text-white transition-colors overflow-hidden border-4 border-gray-600" 
-               style="background-color: ${avatar.value.color}">
-            ${avatar.value.type === 'preset' ? avatar.value.emoji : getAvatarInitial()}
-          </div>
-        </div>
-        
-        <!-- DayZ Style Presets -->
-        <div class="mb-6">
-          <h4 class="text-lg font-medium text-white mb-4">🎮 DayZ Survivor Avatars</h4>
-          <div class="grid grid-cols-5 gap-3 max-h-80 overflow-y-auto">
-            ${presetOptions}
-          </div>
-        </div>
-        
-        <div class="text-sm text-gray-400 mt-4">
-          <p>Choose your favorite survivor character</p>
-        </div>
-      </div>
-    `,
-    background: '#1f2937',
-    color: '#fff',
-    showCancelButton: true,
-    confirmButtonColor: '#dc2626',
-    cancelButtonColor: '#6b7280',
-    confirmButtonText: 'Update Avatar',
-    cancelButtonText: 'Cancel',
-    width: '600px',
-    didOpen: () => {
-      const preview = document.getElementById('avatar-preview')
-      const avatarOptions = document.querySelectorAll('.avatar-option')
-      
-      // Preset avatar handlers
-      avatarOptions.forEach(option => {
-        option.addEventListener('click', (e) => {
-          const target = e.currentTarget
-          const emoji = target.dataset.emoji
-          const color = target.dataset.color
-          const id = target.dataset.id
-          
-          // Update preview
-          preview.style.backgroundColor = color
-          preview.innerHTML = `<span class="text-3xl">${emoji}</span>`
-          
-          // Remove active state from all options
-          avatarOptions.forEach(opt => opt.classList.remove('border-red-500', 'bg-red-900'))
-          // Add active state to selected option
-          target.classList.add('border-red-500', 'bg-red-900')
-          
-          // Store selection
-          preview.dataset.selectedType = 'preset'
-          preview.dataset.selectedEmoji = emoji
-          preview.dataset.selectedColor = color
-          preview.dataset.selectedId = id
-        })
-      })
-      
-      // Set current selection as active
-      if (avatar.value.type === 'preset') {
-        const currentOption = Array.from(avatarOptions).find(opt => 
-          opt.dataset.emoji === avatar.value.emoji
-        )
-        if (currentOption) {
-          currentOption.classList.add('border-red-500', 'bg-red-900')
-          currentOption.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }
-      }
-    },
-    preConfirm: () => {
-      const preview = document.getElementById('avatar-preview')
-      
-      if (preview.dataset.selectedType === 'preset') {
-        return {
-          type: 'preset',
-          emoji: preview.dataset.selectedEmoji,
-          color: preview.dataset.selectedColor,
-          id: preview.dataset.selectedId
-        }
-      }
-      
-      return null
-    }
-  })
-  
-  if (result) {
-    try {
-      avatar.value = result
-      
-      const response = await $fetch('/api/profile/update-profile', {
-        method: 'POST',
-        body: {
-          action: 'update_avatar',
-          data: {
-            avatar: result
-          }
-        }
-      })
-      
-      if (response.success) {
-        // อัปเดต user state สำหรับ header
-        user.value.avatar_data = response.avatarData
-        
-        await Swal.fire({
-          title: 'Avatar Updated! 🎉',
-          text: `You've selected the ${dayzAvatars.find(a => a.id == result.id)?.name || 'avatar'}!`,
-          icon: 'success',
-          background: '#1f2937',
-          color: '#fff',
-          confirmButtonColor: '#dc2626'
-        })
-      }
-    } catch (error) {
-      console.error('Avatar update error:', error)
-      await Swal.fire({
-        title: 'Update Failed',
-        text: error.data?.message || 'Failed to update avatar. Please try again.',
-        icon: 'error',
-        background: '#1f2937',
-        color: '#fff',
-        confirmButtonColor: '#dc2626'
-      })
-    }
-  }
-}
 
 const showChangePassword = async () => {
   const { value: formValues } = await Swal.fire({
@@ -1144,7 +952,6 @@ const showChangePassword = async () => {
   })
   
   if (formValues) {
-    // Implement password change logic here
     await Swal.fire({
       title: 'Password Changed!',
       text: 'Your password has been updated successfully.',
@@ -1169,9 +976,6 @@ const loadProfile = async () => {
       transactions.value = response.transactions || []
       purchases.value = response.purchases || []
       
-      // โหลด avatar จาก database
-      loadAvatarFromProfile()
-      
       // Initialize name editing
       initializeNameEdit()
       
@@ -1187,7 +991,7 @@ const loadProfile = async () => {
       }
       
       console.log('✅ Profile loaded successfully:', response.user.email)
-      console.log('🎨 Avatar loaded:', avatar.value.type)
+      console.log('🎨 Avatar loaded from profile')
       console.log('📊 Name change data:', {
         name_change_count: response.user.name_change_count,
         last_name_change: response.user.last_name_change,
@@ -1252,10 +1056,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.avatar-option:hover {
-  transform: scale(1.05);
-}
-
 .loader {
   border: 4px solid #f3f3f3;
   border-top: 4px solid #dc2626;

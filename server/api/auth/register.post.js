@@ -7,6 +7,7 @@ import {
   createUser, 
   checkBanStatus 
 } from '~/utils/auth.js'
+import { generateAvatarFromName } from '~/utils/avatar.js'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -90,20 +91,26 @@ export default defineEventHandler(async (event) => {
       }
     }
     
-    // Create user
+    // Generate avatar data based on name
+    const avatarData = generateAvatarFromName(name)
+    console.log('🎨 Generated avatar for new user:', name, avatarData)
+    
+    // Create user with avatar data
     const userId = await createUser({
       email,
       name,
       steamid64,
       password,
       ip,
-      macAddress
+      macAddress,
+      avatarData // Pass avatar data to createUser
     })
     
     return {
       success: true,
       message: 'Registration successful! Please wait for admin approval.',
-      userId
+      userId,
+      avatar: avatarData
     }
     
   } catch (error) {

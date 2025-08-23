@@ -32,14 +32,10 @@
           <!-- User Menu (if logged in) -->
           <div v-if="user" class="relative" ref="userMenuRef">
             <button @click="toggleUserMenu" class="flex items-center space-x-2 text-gray-300 hover:text-white focus:outline-none">
-              <!-- User Avatar -->
-              <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden border-2 border-gray-600"
-                   :style="getAvatarStyle()">
-                <div v-if="userAvatar.type === 'preset'" 
-                     class="w-full h-full flex items-center justify-center text-lg">
-                  {{ userAvatar.emoji }}
-                </div>
-                <span v-else class="text-sm font-bold text-white">{{ getUserInitial() }}</span>
+              <!-- User Avatar - Consistent Color System -->
+              <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm border-2 border-gray-600"
+                   :style="getConsistentAvatarStyle()">
+                {{ getUserInitial() }}
               </div>
               
               <span class="hidden sm:block">{{ user.name }}</span>
@@ -131,18 +127,14 @@
 </template>
 
 <script setup>
+// Import the consistent color function
+import { getConsistentColorForName } from '~/utils/avatar.js'
+
 // State
 const user = useState('auth.user')
 const userMenuOpen = ref(false)
 const mobileMenuOpen = ref(false)
 const userMenuRef = ref(null)
-
-// User avatar state
-const userAvatar = ref({
-  type: 'initial',
-  color: '#dc2626',
-  emoji: '🧔'
-})
 
 // Methods
 const formatNumber = (num) => {
@@ -156,8 +148,21 @@ const getUserInitial = () => {
   return 'U'
 }
 
-const getAvatarStyle = () => {
-  return { backgroundColor: userAvatar.value.color }
+// Use the SAME consistent function as other components
+const getConsistentAvatarStyle = () => {
+  // First try to get color from user's avatar_data
+  if (user.value && user.value.avatar_data && user.value.avatar_data.color) {
+    return { backgroundColor: user.value.avatar_data.color }
+  }
+  
+  // Fallback: generate consistent color using the SAME function as everywhere else
+  if (user.value && user.value.name) {
+    const color = getConsistentColorForName(user.value.name)
+    return { backgroundColor: color }
+  }
+  
+  // Default color
+  return { backgroundColor: '#dc2626' }
 }
 
 const toggleUserMenu = () => {
@@ -197,23 +202,6 @@ const logout = async () => {
     console.error('Logout error:', error)
   }
 }
-
-// Load user avatar when user changes
-watch(() => user.value?.avatar_data, (newAvatarData) => {
-  if (newAvatarData) {
-    userAvatar.value = {
-      type: newAvatarData.type || 'initial',
-      color: newAvatarData.color || '#dc2626',
-      emoji: newAvatarData.emoji || '🧔'
-    }
-  } else {
-    userAvatar.value = {
-      type: 'initial',
-      color: '#dc2626',
-      emoji: '🧔'
-    }
-  }
-}, { immediate: true })
 
 // Close user menu when clicking outside
 onMounted(() => {

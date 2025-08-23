@@ -1,3 +1,4 @@
+// utils/auth.js - Updated createUser function
 import bcrypt from 'bcryptjs'
 import { executeQuery } from './database.js'
 
@@ -22,7 +23,6 @@ export async function validateSteamID64(steamid64) {
 
 export async function checkBanStatus(ip, macAddress = null, steamid64 = null) {
   try {
-    // ✅ ปรับปรุงการตรวจสอบ ban status ให้ครอบคลุมมากขึ้น
     let query = `
       SELECT br.*, u.email, u.name, u.steamid64
       FROM ban_records br
@@ -77,33 +77,41 @@ export async function checkUserExists(email, steamid64) {
   return result.length > 0 ? result[0] : null
 }
 
+// ✅ Updated createUser function with avatar support
 export async function createUser(userData) {
-  const { email, name, steamid64, password, ip, macAddress } = userData
+  const { email, name, steamid64, password, ip, macAddress, avatarData } = userData
   
   const hashedPassword = await hashPassword(password)
   const config = await getServerConfig()
   const isActive = config.auto_approve_users === 'true'
   
+  // Prepare avatar data for database
+  const avatarJsonString = avatarData ? JSON.stringify(avatarData) : null
+  
   const query = `
-    INSERT INTO users (email, name, steamid64, password, is_active, last_ip, mac_address, registration_ip, registration_mac)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (
+      email, name, steamid64, password, is_active, 
+      last_ip, mac_address, registration_ip, registration_mac, avatar_data
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
   
   const result = await executeQuery(query, [
-    email, name, steamid64, hashedPassword, isActive, ip, macAddress, ip, macAddress
+    email, name, steamid64, hashedPassword, isActive, 
+    ip, macAddress, ip, macAddress, avatarJsonString
   ])
+  
+  console.log('✅ User created with avatar:', email, avatarData)
   
   return result.insertId
 }
 
-// ✅ แก้ไข loginUser ให้ส่ง is_active กลับมาด้วย
 export async function loginUser(email, password, ip, macAddress = null) {
   console.log(`🔐 Login attempt: ${email} from IP: ${ip}`)
   
   try {
-    // ✅ ขั้นตอนที่ 1: ค้นหา user โดย email ก่อน (เพื่อได้ steamid64)
     const userQuery = `
-      SELECT id, email, name, steamid64, password, is_active, is_banned, points, banned_reason
+      SELECT id, email, name, steamid64, password, is_active, is_banned, points, banned_reason, avatar_data
       FROM users 
       WHERE email = ?
     `
@@ -118,7 +126,7 @@ export async function loginUser(email, password, ip, macAddress = null) {
     const user = users[0]
     console.log(`🔍 User found: ${user.name} - Active: ${user.is_active}, Banned: ${user.is_banned}`)
     
-    // ✅ ขั้นตอนที่ 2: ตรวจสอบรหัสผ่านก่อน
+    // Verify password
     const isValidPassword = await verifyPassword(password, user.password)
     if (!isValidPassword) {
       console.log(`❌ Invalid password for: ${email}`)
@@ -126,15 +134,13 @@ export async function loginUser(email, password, ip, macAddress = null) {
       throw new Error('Invalid email or password')
     }
     
-    // ✅ ขั้นตอนที่ 3: ตรวจสอบ ban status หลังจากรหัสผ่านถูกต้อง
-    // ตรวจสอบทั้ง user ban และ IP/MAC ban
+    // Check ban status
     const banStatus = await checkBanStatus(ip, macAddress, user.steamid64)
     if (banStatus) {
       console.log(`🚫 Login blocked - banned IP/MAC/User: ${ip}/${macAddress}/${user.steamid64}`)
       const banReason = banStatus.reason || 'Access denied by administrator'
       await logLoginAttempt(email, ip, false, 'BANNED_IP_MAC_USER')
       
-      // ✅ ส่ง status แทน throw error
       return {
         status: 'banned',
         code: 'ACCOUNT_BANNED',
@@ -145,18 +151,16 @@ export async function loginUser(email, password, ip, macAddress = null) {
           email: user.email,
           name: user.name,
           steamid64: user.steamid64,
-          is_active: user.is_active,  // ✅ เพิ่มการส่ง is_active
+          is_active: user.is_active,
           is_banned: user.is_banned
         }
       }
     }
     
-    // ✅ ขั้นตอนที่ 4: ตรวจสอบสถานะ banned ใน users table
     if (user.is_banned) {
       console.log(`🚫 Login blocked - banned user: ${email}`)
       await logLoginAttempt(email, ip, false, 'BANNED_USER')
       
-      // ✅ ส่ง status แทน throw error
       return {
         status: 'banned',
         code: 'ACCOUNT_BANNED',
@@ -167,13 +171,12 @@ export async function loginUser(email, password, ip, macAddress = null) {
           email: user.email,
           name: user.name,
           steamid64: user.steamid64,
-          is_active: user.is_active,  // ✅ เพิ่มการส่ง is_active
+          is_active: user.is_active,
           is_banned: user.is_banned
         }
       }
     }
     
-    // ✅ ขั้นตอนที่ 5: ตรวจสอบสถานะ active (pending approval หรือ deactivated)
     if (!user.is_active) {
       console.log(`⏳ User pending approval or deactivated: ${email} - Active: ${user.is_active}`)
       await logLoginAttempt(email, ip, true, 'PENDING_APPROVAL')
@@ -188,13 +191,26 @@ export async function loginUser(email, password, ip, macAddress = null) {
           name: user.name,
           steamid64: user.steamid64,
           points: user.points || 0,
-          is_active: user.is_active,  // ✅ ส่ง is_active กลับมา
+          is_active: user.is_active,
           is_banned: user.is_banned
         }
       }
     }
     
-    // ✅ ขั้นตอนที่ 6: Login สำเร็จ - อัปเดตข้อมูล
+    // Parse avatar data
+    let avatarData = null
+    if (user.avatar_data) {
+      try {
+        avatarData = typeof user.avatar_data === 'string' 
+          ? JSON.parse(user.avatar_data) 
+          : user.avatar_data
+      } catch (error) {
+        console.error('❌ Failed to parse avatar_data:', error)
+        avatarData = null
+      }
+    }
+    
+    // Update login info
     try {
       await executeQuery(
         'UPDATE users SET last_login = NOW(), last_ip = ?, mac_address = ? WHERE id = ?',
@@ -204,7 +220,6 @@ export async function loginUser(email, password, ip, macAddress = null) {
       console.warn('Failed to update user login info:', updateError.message)
     }
     
-    // Log successful attempt
     await logLoginAttempt(email, ip, true, 'SUCCESS')
     
     console.log(`✅ Login successful: ${user.name} (${email}) - Active: ${user.is_active}`)
@@ -217,29 +232,26 @@ export async function loginUser(email, password, ip, macAddress = null) {
         name: user.name,
         steamid64: user.steamid64,
         points: user.points || 0,
-        is_active: user.is_active,  // ✅ ส่ง is_active กลับมา
-        is_banned: user.is_banned
+        is_active: user.is_active,
+        is_banned: user.is_banned,
+        avatar_data: avatarData // Include avatar data in login response
       }
     }
     
   } catch (error) {
-    // ✅ ให้แน่ใจว่า error ที่ throw ออกไปมี message ที่ชัดเจน
     console.error(`❌ Login error for ${email}:`, error.message)
     throw error
   }
 }
 
-// ✅ ปรับปรุงฟังก์ชัน logLoginAttempt ให้ทำงานกับโครงสร้างเดิม
 export async function logLoginAttempt(email, ip, success, reason = null) {
   try {
-    // ✅ ใช้โครงสร้างเดิมของตาราง login_attempts (ไม่มี created_at และ reason)
     const query = `
       INSERT INTO login_attempts (email, ip_address, success)
       VALUES (?, ?, ?)
     `
     await executeQuery(query, [email, ip, success])
     
-    // ✅ Log reason ใน console แทนการเก็บในฐานข้อมูล
     if (reason) {
       console.log(`📝 Login attempt logged: ${email} - ${success ? 'SUCCESS' : 'FAILED'} - Reason: ${reason}`)
     }
@@ -260,7 +272,6 @@ export async function getServerConfig() {
   return config
 }
 
-// 🔧 แก้ไข canChangeUserName function ให้ทำงานถูกต้อง
 export async function canChangeUserName(userId) {
   console.log('🔍 Checking name change eligibility for userId:', userId)
   
@@ -279,18 +290,16 @@ export async function canChangeUserName(userId) {
   const user = result[0]
   console.log('📊 User data:', user)
   
-  // ดึง config สำหรับ max changes
   const config = await getServerConfig()
   const maxChanges = parseInt(config.max_name_changes_per_month || '1')
   
-  // ถ้าไม่เคยเปลี่ยนชื่อเลย ให้เปลี่ยนได้
   if (!user.last_name_change || user.name_change_count === 0) {
     console.log('✅ Never changed name before - allowed')
     return true
   }
   
   const currentDate = new Date()
-  const currentMonth = currentDate.getMonth() // 0-11
+  const currentMonth = currentDate.getMonth()
   const currentYear = currentDate.getFullYear()
   
   const lastChangeDate = new Date(user.last_name_change)
@@ -304,7 +313,6 @@ export async function canChangeUserName(userId) {
     maxChanges: maxChanges
   })
   
-  // ตรวจสอบว่าอยู่ในเดือนเดียวกันหรือไม่
   const isSameMonth = lastChangeMonth === currentMonth && lastChangeYear === currentYear
   
   if (!isSameMonth) {
@@ -312,7 +320,6 @@ export async function canChangeUserName(userId) {
     return true
   }
   
-  // ถ้าอยู่ในเดือนเดียวกัน ตรวจสอบจำนวนครั้ง
   const allowed = user.name_change_count < maxChanges
   
   console.log('📊 Same month check:', {

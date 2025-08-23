@@ -27,12 +27,11 @@ export default defineEventHandler(async (event) => {
     let loginResult
     
     try {
-      // Login user - ใช้ try-catch เพื่อจัดการ error จาก loginUser
+      // Login user
       loginResult = await loginUser(email, password, ip, macAddress)
     } catch (loginError) {
       console.error('🔐 Login error for:', email, '-', loginError.message)
       
-      // ✅ ตรวจสอบ error messages เพื่อส่ง response ที่เหมาะสม
       if (loginError.message.includes('Invalid email or password')) {
         throw createError({
           statusCode: 401,
@@ -40,14 +39,12 @@ export default defineEventHandler(async (event) => {
         })
       }
       
-      // อื่นๆ
       throw createError({
         statusCode: 401,
         statusMessage: loginError.message || 'Login failed'
       })
     }
     
-    // ✅ ตรวจสอบผลลัพธ์จาก loginUser
     if (!loginResult || !loginResult.status) {
       console.error('❌ Invalid login result structure')
       throw createError({
@@ -56,7 +53,7 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    // ✅ จัดการกรณี banned user - กลับไปใช้ createError เพื่อให้ Frontend catch ได้
+    // Handle banned user
     if (loginResult.status === 'banned') {
       console.log('🚫 User access restricted:', email, '-', loginResult.banReason)
       throw createError({
@@ -70,7 +67,7 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    // จัดการกรณีรออนุมัติ
+    // Handle pending approval
     if (loginResult.status === 'pending_approval') {
       console.log('⏳ User pending approval:', email)
       return {
@@ -81,7 +78,7 @@ export default defineEventHandler(async (event) => {
       }
     }
     
-    // ✅ Login สำเร็จ - ตรวจสอบว่ามี user object ครบถ้วน
+    // Login successful
     const user = loginResult.user
     
     if (!user || !user.id) {
@@ -92,7 +89,7 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    // สร้าง session - เฉพาะเมื่อ login สำเร็จและมี user data ครบถ้วน
+    // Create session
     try {
       const sessionConfig = {
         maxAge: 24 * 60 * 60, // 24 hours
@@ -105,14 +102,15 @@ export default defineEventHandler(async (event) => {
       
       const session = await useSession(event, sessionConfig)
       
-      // สร้าง session data
+      // Create session data with avatar_data
       const sessionData = {
         user: {
           id: user.id,
           email: user.email,
           name: user.name,
           steamid64: user.steamid64,
-          points: user.points || 0
+          points: user.points || 0,
+          avatar_data: user.avatar_data || null // Include avatar data in session
         },
         isAdmin: false,
         loginTime: new Date().toISOString(),
@@ -122,10 +120,10 @@ export default defineEventHandler(async (event) => {
         lastAccess: new Date().toISOString()
       }
       
-      // บันทึก session data
+      // Save session data
       await session.update(sessionData)
       
-      // บันทึก session ลง database
+      // Save session to database
       const sessionId = session.id || sessionStore.generateSessionId()
       const sessionSaved = await sessionStore.saveSession(
         sessionId, 
@@ -141,7 +139,6 @@ export default defineEventHandler(async (event) => {
       
     } catch (sessionError) {
       console.error('❌ Session creation failed:', sessionError)
-      // ถ้า session ไม่สำเร็จ ให้ throw error เพื่อไม่ให้ login ผ่าน
       throw createError({
         statusCode: 500,
         statusMessage: 'Session creation failed. Please try again.'
@@ -156,7 +153,8 @@ export default defineEventHandler(async (event) => {
         email: user.email,
         name: user.name,
         steamid64: user.steamid64,
-        points: user.points || 0
+        points: user.points || 0,
+        avatar_data: user.avatar_data || null // Include avatar data in response
       }
     }
     

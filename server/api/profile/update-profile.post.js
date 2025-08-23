@@ -1,5 +1,6 @@
 import { executeQuery } from '~/utils/database.js'
 import { canChangeUserName } from '~/utils/auth.js'
+import { updateUserAvatar } from '~/utils/avatar.js'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -28,9 +29,6 @@ export default defineEventHandler(async (event) => {
     switch (action) {
       case 'change_name':
         return await handleNameChange(userId, data.newName, session)
-      
-      case 'update_avatar':
-        return await handleAvatarUpdate(userId, data.avatar, session)
       
       default:
         throw createError({
@@ -110,10 +108,10 @@ async function handleNameChange(userId, newName, session) {
   
   const user = currentUserData[0]
   const currentDate = new Date()
-  const currentDateString = currentDate.toISOString().split('T')[0] // YYYY-MM-DD format
+  const currentDateString = currentDate.toISOString().split('T')[0]
   
   // คำนวณ name_change_count ใหม่
-  let newNameChangeCount = 1 // เริ่มจาก 1 สำหรับการเปลี่ยนแปลงครั้งนี้
+  let newNameChangeCount = 1
   
   if (user.last_name_change) {
     const lastChangeDate = new Date(user.last_name_change)
@@ -129,12 +127,11 @@ async function handleNameChange(userId, newName, session) {
       lastChangeYear: lastChangeYear
     })
     
-    // ถ้าเป็นเดือนเดียวกัน ให้เพิ่มจาก count เดิม
     if (lastChangeMonth === currentMonth && lastChangeYear === currentYear) {
       newNameChangeCount = (user.name_change_count || 0) + 1
       console.log('📊 Same month - incrementing count')
     } else {
-      newNameChangeCount = 1 // Reset เป็น 1 เพราะคนละเดือน
+      newNameChangeCount = 1
       console.log('📊 Different month - resetting count to 1')
     }
   }
@@ -148,119 +145,47 @@ async function handleNameChange(userId, newName, session) {
     currentDate: currentDateString
   })
   
-  // อัปเดตชื่อในฐานข้อมูล
-  await executeQuery(`
-    UPDATE users 
-    SET name = ?, 
-        name_change_count = ?,
-        last_name_change = ?,
-        updated_at = NOW()
-    WHERE id = ?
-  `, [newName, newNameChangeCount, currentDateString, userId])
-  
-  // อัปเดต session
-  await session.update({
-    ...session.data,
-    user: {
-      ...session.data.user,
-      name: newName
-    }
-  })
-  
-  // คำนวณเวลาที่สามารถเปลี่ยนได้อีกครั้ง
-  const nextAllowedDate = new Date(currentDate)
-  nextAllowedDate.setMonth(nextAllowedDate.getMonth() + 1)
-  nextAllowedDate.setDate(1) // วันที่ 1 ของเดือนถัดไป
-  
-  console.log('✅ Name changed successfully for user:', userId)
-  
-  return {
-    success: true,
-    message: 'Name changed successfully',
-    newName: newName,
-    nameChangeCount: newNameChangeCount,
-    lastNameChange: currentDateString,
-    nextAllowedDate: nextAllowedDate.toISOString(),
-    remainingChanges: Math.max(0, 1 - newNameChangeCount) // assuming max 1 per month
-  }
-}
-
-async function handleAvatarUpdate(userId, avatarData, session) {
-  console.log('🎨 Processing avatar update for userId:', userId, avatarData)
-  
-  // Validation
-  if (!avatarData || typeof avatarData !== 'object') {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Invalid avatar data'
-    })
-  }
-  
-  const { type, color, emoji, id } = avatarData
-  
-  // ตรวจสอบว่า type ถูกต้อง (เหลือแค่ preset กับ initial)
-  const validTypes = ['initial', 'preset']
-  if (!type || !validTypes.includes(type)) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Invalid avatar type'
-    })
-  }
-  
-  // Validation สำหรับ preset type
-  if (type === 'preset') {
-    if (!emoji || !color) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Emoji and color are required for preset type'
-      })
-    }
-  }
-  
-  // เตรียม avatar data สำหรับบันทึก
-  const avatarDataToSave = {
-    type,
-    color: color || '#dc2626',
-    emoji: emoji || '🧔',
-    id: id || null,
-    updatedAt: new Date().toISOString()
-  }
-  
+  // อัปเดตชื่อและสร้าง avatar ใหม่
   try {
-    // เตรียม JSON string
-    const avatarJsonString = JSON.stringify(avatarDataToSave)
-    console.log('💾 Saving avatar JSON:', avatarJsonString)
+    // สร้าง avatar ใหม่จากชื่อใหม่
+    const newAvatarData = await updateUserAvatar(userId, newName)
     
-    // บันทึก avatar_data ลง database
+    // อัปเดตชื่อในฐานข้อมูล
     await executeQuery(`
       UPDATE users 
-      SET avatar_data = ?,
+      SET name = ?, 
+          name_change_count = ?,
+          last_name_change = ?,
           updated_at = NOW()
       WHERE id = ?
-    `, [avatarJsonString, userId])
+    `, [newName, newNameChangeCount, currentDateString, userId])
     
     // อัปเดต session
     await session.update({
       ...session.data,
       user: {
         ...session.data.user,
-        avatar_data: avatarDataToSave
+        name: newName,
+        avatar_data: newAvatarData
       }
     })
     
-    console.log('✅ Avatar updated successfully for user:', userId)
+    console.log('✅ Name and avatar updated successfully for user:', userId)
     
     return {
       success: true,
-      message: 'Avatar updated successfully',
-      avatarData: avatarDataToSave
+      message: 'Name changed successfully',
+      newName: newName,
+      nameChangeCount: newNameChangeCount,
+      lastNameChange: currentDateString,
+      avatarData: newAvatarData
     }
     
   } catch (error) {
-    console.error('❌ Avatar update database error:', error)
+    console.error('❌ Name change database error:', error)
     throw createError({
       statusCode: 500,
-      statusMessage: 'Failed to save avatar to database'
+      statusMessage: 'Failed to update name in database'
     })
   }
 }
